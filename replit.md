@@ -72,6 +72,21 @@ PWA para Android (Chrome) que regista pesagens de caixas de mirtilo em campo. Co
 - Overload: `----` | Underload: `lo -` | Bateria baixa: `bA lo`
 - DB9 pin 2(RXD)↔3(TXD), pin 5(GND)
 
+## Redundâncias de Pesagem
+
+A página de pesagem tem 3 modos seleccionáveis por separadores:
+
+| Modo | Descrição |
+|------|-----------|
+| **Balança** | Leitura directa via Web Serial API (Baxtran XTA) |
+| **Manual** | Campo numérico para introdução directa em gramas |
+| **IA / Foto** | Tirar foto ao visor → GPT-4o Vision lê o valor |
+
+O botão "REGISTAR" usa a fonte activa e o `scaleId` regista a origem (`BAXTRAN-XTA-01`, `MANUAL-MANUAL`, `MANUAL-IA`). O histórico do dia mostra a origem de cada pesagem com cor e ícone.
+
+### Endpoint IA
+`POST /api/scale/read-photo` — aceita `imageBase64` + `mimeType`, devolve `{grams: number}` ou `{grams: null, error: string}`. Usa GPT-4o Vision via Replit AI Integrations (sem chave API própria necessária).
+
 ## Anti-error UX
 
 - Peso válido: 50g–5100g
