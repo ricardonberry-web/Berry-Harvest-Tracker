@@ -1,0 +1,18 @@
+packages:
+  "framer-motion": "For smooth page transitions and interactive modal/button animations"
+  "jsqr": "For scanning worker QR codes from the device camera"
+  "qrcode.react": "For generating and displaying worker QR codes for printing"
+  "date-fns": "For formatting dates and handling the daily checklist logic"
+  "@types/w3c-web-serial": "TypeScript definitions for the Web Serial API"
+
+images:
+  - path: "artifacts/mirtilo-app/public/images/logo.png"
+    description: "A modern, minimalist app icon representing a stylized blueberry and a digital scale, deep indigo and vibrant green on a transparent background"
+    aspect_ratio: "1:1"
+  - path: "artifacts/mirtilo-app/public/images/blueberry-field.png"
+    description: "A beautiful, slightly blurred background of a blueberry bush with ripe berries, optimized for a light high-contrast overlay"
+    aspect_ratio: "16:9"
+
+notes:
+  - Assumes Android tablet usage via Chrome for Web Serial API support
+  - Scale connection uses 9600 baud, 8N1, parsing Baxtran XTA 'ST,GS:' format

@@ -1,22 +1,26 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
-  description: API specification
+  version: 1.0.0
+  description: API para sistema de pesagem de mirtilo
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: workers
+    description: Worker management
+  - name: weigh-records
+    description: Weighing records
+  - name: reports
+    description: Reports and rankings
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +28,245 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /workers:
+    get:
+      operationId: listWorkers
+      tags: [workers]
+      summary: List all workers
+      responses:
+        "200":
+          description: List of workers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Worker"
+    post:
+      operationId: createWorker
+      tags: [workers]
+      summary: Create a new worker
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkerBody"
+      responses:
+        "201":
+          description: Worker created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Worker"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Worker ID already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /workers/{id}:
+    get:
+      operationId: getWorker
+      tags: [workers]
+      summary: Get a worker by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Worker found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Worker"
+        "404":
+          description: Worker not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateWorker
+      tags: [workers]
+      summary: Update a worker
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkerBody"
+      responses:
+        "200":
+          description: Worker updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Worker"
+        "404":
+          description: Worker not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteWorker
+      tags: [workers]
+      summary: Delete a worker
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Worker deleted
+        "404":
+          description: Worker not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /weigh-records:
+    get:
+      operationId: listWeighRecords
+      tags: [weigh-records]
+      summary: List weigh records with optional filters
+      parameters:
+        - name: workerId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+          description: ISO date string YYYY-MM-DD
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of weigh records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WeighRecord"
+    post:
+      operationId: createWeighRecord
+      tags: [weigh-records]
+      summary: Create a weigh record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWeighRecordBody"
+      responses:
+        "201":
+          description: Record created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeighRecord"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /weigh-records/{id}:
+    delete:
+      operationId: deleteWeighRecord
+      tags: [weigh-records]
+      summary: Delete a weigh record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Record deleted
+        "404":
+          description: Record not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /reports/daily:
+    get:
+      operationId: getDailyReport
+      tags: [reports]
+      summary: Get daily productivity ranking
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+          description: ISO date YYYY-MM-DD (defaults to today)
+      responses:
+        "200":
+          description: Daily report with worker rankings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyReport"
+
+  /reports/export:
+    get:
+      operationId: exportRecords
+      tags: [reports]
+      summary: Export records as CSV
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+          description: ISO date YYYY-MM-DD (defaults to today)
+        - name: workerId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +277,159 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Worker:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - active
+        - createdAt
+
+    CreateWorkerBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Worker identifier (e.g. W001)
+        name:
+          type: string
+      required:
+        - id
+        - name
+
+    UpdateWorkerBody:
+      type: object
+      properties:
+        name:
+          type: string
+        active:
+          type: boolean
+
+    WeighRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        workerId:
+          type: string
+        workerName:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        weightGrams:
+          type: number
+        unit:
+          type: string
+        scaleId:
+          type: string
+        rawLine:
+          type: string
+        syncStatus:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - workerId
+        - workerName
+        - timestamp
+        - weightGrams
+        - unit
+        - scaleId
+        - rawLine
+        - syncStatus
+        - createdAt
+
+    CreateWeighRecordBody:
+      type: object
+      properties:
+        workerId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        weightGrams:
+          type: number
+        unit:
+          type: string
+        scaleId:
+          type: string
+        rawLine:
+          type: string
+      required:
+        - workerId
+        - weightGrams
+        - unit
+        - scaleId
+        - rawLine
+
+    WorkerDailyStats:
+      type: object
+      properties:
+        workerId:
+          type: string
+        workerName:
+          type: string
+        totalCaixas:
+          type: integer
+        totalKg:
+          type: number
+        mediaGrPorCaixa:
+          type: number
+        caixasPorHora:
+          type: number
+        primeiroRegisto:
+          type: ["string", "null"]
+        ultimoRegisto:
+          type: ["string", "null"]
+        rankKg:
+          type: integer
+      required:
+        - workerId
+        - workerName
+        - totalCaixas
+        - totalKg
+        - mediaGrPorCaixa
+        - caixasPorHora
+        - primeiroRegisto
+        - ultimoRegisto
+        - rankKg
+
+    DailyReport:
+      type: object
+      properties:
+        date:
+          type: string
+        workers:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkerDailyStats"
+        totalRecords:
+          type: integer
+        totalKg:
+          type: number
+      required:
+        - date
+        - workers
+        - totalRecords
+        - totalKg
