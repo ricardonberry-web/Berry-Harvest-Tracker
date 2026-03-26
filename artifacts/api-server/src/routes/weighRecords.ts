@@ -58,7 +58,11 @@ router.get("/weigh-records", async (req, res): Promise<void> => {
 });
 
 router.post("/weigh-records", async (req, res): Promise<void> => {
-  const parsed = CreateWeighRecordBody.safeParse(req.body);
+  const body = { ...req.body };
+  if (typeof body.timestamp === "string") {
+    body.timestamp = new Date(body.timestamp);
+  }
+  const parsed = CreateWeighRecordBody.safeParse(body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;

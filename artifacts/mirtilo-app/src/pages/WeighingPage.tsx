@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Layout } from "@/components/Layout";
 import { useScale } from "@/hooks/use-scale";
 import { useQRScanner } from "@/hooks/use-qr-scanner";
@@ -6,7 +6,7 @@ import { useBeep } from "@/hooks/use-beep";
 import { useListWorkers, useCreateWeighRecord, useListWeighRecords } from "@workspace/api-client-react";
 import {
   Camera, X, User, Scale, AlertCircle, Trash2, CheckCircle2,
-  Keyboard, Sparkles, Usb, RefreshCw,
+  Keyboard, Sparkles, Usb, RefreshCw, ZapOff,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
@@ -19,20 +19,25 @@ export default function WeighingPage() {
   const beep = useBeep();
   const { toast } = useToast();
 
+  // Worker identification state
   const [activeWorkerId, setActiveWorkerId] = useState<string | null>(null);
   const [manualIdInput, setManualIdInput] = useState("");
   const [showScanner, setShowScanner] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const lastRecordTimeRef = useRef<number>(0);
 
+  // Weight mode state
   const [weightMode, setWeightMode] = useState<WeightMode>("scale");
   const [manualGrams, setManualGrams] = useState("");
-  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
-  const [photoBase64, setPhotoBase64] = useState<string | null>(null);
-  const [photoMimeType, setPhotoMimeType] = useState("image/jpeg");
+
+  // AI / Camera state
+  const [cameraActive, setCameraActive] = useState(false);
+  const [capturedDataUrl, setCapturedDataUrl] = useState<string | null>(null);
   const [aiGrams, setAiGrams] = useState<number | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const photoInputRef = useRef<HTMLInputElement>(null);
+  const cameraVideoRef = useRef<HTMLVideoElement>(null);
+  const cameraCanvasRef = useRef<HTMLCanvasElement>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
 
   const { data: workers = [] } = useListWorkers();
   const activeWorker = workers.find(w => w.id === activeWorkerId);
@@ -45,6 +50,93 @@ export default function WeighingPage() {
   const createRecord = useCreateWeighRecord();
   const { videoRef, canvasRef, startScanner, stopScanner, scanFrame } = useQRScanner();
 
+  // Stop camera when leaving photo mode
+  const stopCamera = useCallback(() => {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach(t => t.stop());
+      cameraStreamRef.current = null;
+    }
+    setCameraActive(false);
+  }, []);
+
+  // Start rear camera
+  const startCamera = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
+      cameraStreamRef.current = stream;
+      if (cameraVideoRef.current) {
+        cameraVideoRef.current.srcObject = stream;
+        cameraVideoRef.current.play();
+      }
+      setCameraActive(true);
+    } catch (err: any) {
+      toast({
+        title: "Câmara não disponível",
+        description: err?.message || "Não foi possível aceder à câmara. Verifique as permissões.",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
+  // Cleanup camera on unmount or mode change
+  useEffect(() => {
+    if (weightMode !== "photo") stopCamera();
+  }, [weightMode, stopCamera]);
+
+  useEffect(() => () => stopCamera(), [stopCamera]);
+
+  // Capture a frame from video and send to AI
+  const captureAndAnalyze = useCallback(async () => {
+    const video = cameraVideoRef.current;
+    const canvas = cameraCanvasRef.current;
+    if (!video || !canvas) return;
+
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    const base64 = dataUrl.split(",")[1];
+    setCapturedDataUrl(dataUrl);
+    stopCamera();
+
+    setIsAnalyzing(true);
+    try {
+      const res = await fetch("/api/scale/read-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64, mimeType: "image/jpeg" }),
+      });
+      const json = await res.json();
+      if (json.grams !== null && json.grams !== undefined && !json.error) {
+        setAiGrams(json.grams);
+        beep("success");
+        toast({ title: "IA leu o peso", description: `${json.grams} gramas detectados.` });
+      } else {
+        beep("warning");
+        const msg = json.error === "OVERLOAD" ? "Overload detectado na balança." :
+                    json.error === "INVALID" ? "Valor inválido ou negativo." :
+                    "Imagem não nítida — tente uma nova foto mais próxima.";
+        toast({ title: "IA não conseguiu ler", description: msg, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Erro de comunicação", description: "Falha ao contactar o servidor de IA.", variant: "destructive" });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [beep, toast, stopCamera]);
+
+  const resetPhoto = useCallback(() => {
+    setCapturedDataUrl(null);
+    setAiGrams(null);
+    stopCamera();
+  }, [stopCamera]);
+
+  // QR scanner
   useEffect(() => {
     if (showScanner) {
       startScanner();
@@ -65,7 +157,7 @@ export default function WeighingPage() {
       toast({ title: "Trabalhador Identificado", description: `${worker.name} (${worker.id})` });
     } else {
       beep("error");
-      toast({ title: "Trabalhador não encontrado", description: `O ID ${id} não existe no sistema.`, variant: "destructive" });
+      toast({ title: "Trabalhador não encontrado", description: `O ID ${id} não existe.`, variant: "destructive" });
       stopScanner();
       setTimeout(startScanner, 2000);
     }
@@ -79,58 +171,10 @@ export default function WeighingPage() {
     }
   };
 
-  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const mimeType = file.type || "image/jpeg";
-    setPhotoMimeType(mimeType);
-    setAiGrams(null);
-
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target?.result as string;
-      setPhotoDataUrl(dataUrl);
-      const base64 = dataUrl.split(",")[1];
-      setPhotoBase64(base64);
-
-      setIsAnalyzing(true);
-      try {
-        const res = await fetch("/api/scale/read-photo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64: base64, mimeType }),
-        });
-        const json = await res.json();
-        if (json.grams !== null && json.grams !== undefined) {
-          setAiGrams(json.grams);
-          beep("success");
-          toast({ title: "IA leu o peso", description: `${json.grams} gramas detectados na balança.` });
-        } else {
-          beep("warning");
-          toast({
-            title: "IA não conseguiu ler",
-            description: json.error === "OVERLOAD" ? "Overload detectado na balança." :
-                          json.error === "UNREADABLE" ? "Imagem não suficientemente nítida." :
-                          "Não foi possível ler o valor.",
-            variant: "destructive",
-          });
-        }
-      } catch {
-        toast({ title: "Erro de comunicação", description: "Falha ao contactar o servidor de IA.", variant: "destructive" });
-      } finally {
-        setIsAnalyzing(false);
-        if (e.target) e.target.value = "";
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
   const getWeightToRegister = (): { grams: number; source: string } | null => {
     if (weightMode === "scale") {
-      if (reading?.status === "STABLE" && reading.weightGrams > 0) {
+      if (reading?.status === "STABLE" && reading.weightGrams > 0)
         return { grams: reading.weightGrams, source: "balança" };
-      }
       return null;
     }
     if (weightMode === "manual") {
@@ -139,7 +183,7 @@ export default function WeighingPage() {
       return null;
     }
     if (weightMode === "photo") {
-      if (aiGrams !== null && aiGrams > 0) return { grams: aiGrams, source: "IA/foto" };
+      if (aiGrams !== null && aiGrams > 0) return { grams: aiGrams, source: "IA" };
       return null;
     }
     return null;
@@ -169,7 +213,7 @@ export default function WeighingPage() {
           weightGrams: weight.grams,
           unit: "g",
           scaleId: weight.source === "balança" ? "BAXTRAN-XTA-01" : `MANUAL-${weight.source.toUpperCase()}`,
-          rawLine: weight.source === "balança" ? (reading?.rawLine ?? "") : `manual:${weight.grams}g`,
+          rawLine: weight.source === "balança" ? (reading?.rawLine ?? "") : `${weight.source}:${weight.grams}g`,
           timestamp: new Date().toISOString(),
         },
       });
@@ -178,9 +222,7 @@ export default function WeighingPage() {
       refetchRecords();
 
       if (weightMode === "manual") setManualGrams("");
-      if (weightMode === "photo") { setPhotoDataUrl(null); setPhotoBase64(null); setAiGrams(null); }
-
-      toast({ title: "Pesagem registada", description: `${weight.grams}g via ${weight.source}` });
+      if (weightMode === "photo") resetPhoto();
     } catch {
       beep("error");
       toast({ title: "Erro ao registar", description: "Verifique a ligação e tente novamente.", variant: "destructive" });
@@ -191,7 +233,6 @@ export default function WeighingPage() {
 
   const weight = getWeightToRegister();
   const canWeigh = !!activeWorkerId && !!weight && !isProcessing && !isAnalyzing;
-
   const isOverload = reading?.status === "OVERLOAD";
 
   return (
@@ -270,7 +311,7 @@ export default function WeighingPage() {
               { mode: "scale" as WeightMode, icon: <Usb className="w-4 h-4" />, label: "Balança" },
               { mode: "manual" as WeightMode, icon: <Keyboard className="w-4 h-4" />, label: "Manual" },
               { mode: "photo" as WeightMode, icon: <Sparkles className="w-4 h-4" />, label: "IA / Foto" },
-            ] as const).map(({ mode, icon, label }) => (
+            ]).map(({ mode, icon, label }) => (
               <button
                 key={mode}
                 onClick={() => setWeightMode(mode)}
@@ -287,12 +328,12 @@ export default function WeighingPage() {
 
           <div className="p-6">
 
-            {/* SCALE MODE */}
+            {/* ── SCALE MODE ── */}
             {weightMode === "scale" && (
-              <div className="text-center relative">
+              <div className="text-center">
                 {scaleStatus === "DISCONNECTED" && (
                   <div className="flex flex-col items-center gap-3 py-6 text-muted-foreground">
-                    <Scale className="w-12 h-12 opacity-40" />
+                    <ZapOff className="w-12 h-12 opacity-40" />
                     <p className="font-medium">Balança desconectada</p>
                     <p className="text-xs">Ligue a balança pelo botão no topo da página</p>
                   </div>
@@ -330,7 +371,7 @@ export default function WeighingPage() {
               </div>
             )}
 
-            {/* MANUAL MODE */}
+            {/* ── MANUAL MODE ── */}
             {weightMode === "manual" && (
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground text-center">
@@ -363,41 +404,72 @@ export default function WeighingPage() {
               </div>
             )}
 
-            {/* PHOTO / AI MODE */}
+            {/* ── PHOTO / AI MODE ── */}
             {weightMode === "photo" && (
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground text-center">
-                  Tire uma foto ao visor da balança — a IA lê o valor automaticamente
-                </p>
 
-                <input
-                  ref={photoInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  onChange={handlePhotoCapture}
-                />
+                {/* No photo yet — show camera or activate button */}
+                {!capturedDataUrl && (
+                  <>
+                    {!cameraActive ? (
+                      <button
+                        onClick={startCamera}
+                        className="w-full flex flex-col items-center justify-center gap-4 p-10 border-2 border-dashed border-violet-300 rounded-2xl bg-violet-50 text-violet-600 hover:bg-violet-100 transition-colors dark:bg-violet-950/20 dark:border-violet-700 dark:text-violet-400"
+                      >
+                        <Sparkles className="w-12 h-12" />
+                        <div className="text-center">
+                          <p className="font-bold text-lg">Abrir Câmara</p>
+                          <p className="text-sm opacity-70">Aponte para o visor da balança e capture</p>
+                        </div>
+                      </button>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="relative rounded-2xl overflow-hidden bg-black aspect-video">
+                          <video
+                            ref={cameraVideoRef}
+                            autoPlay
+                            playsInline
+                            muted
+                            className="w-full h-full object-cover"
+                          />
+                          {/* Aiming guide */}
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="border-2 border-white/60 rounded-xl w-3/4 h-1/2 opacity-70" />
+                          </div>
+                          <p className="absolute bottom-3 left-0 right-0 text-center text-white text-xs font-medium drop-shadow">
+                            Centre o visor da balança no rectângulo
+                          </p>
+                        </div>
+                        <canvas ref={cameraCanvasRef} className="hidden" />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={captureAndAnalyze}
+                            className="flex-1 py-4 bg-violet-600 text-white font-bold rounded-2xl text-lg hover:bg-violet-700 active:scale-95 transition-all shadow-lg shadow-violet-600/30"
+                          >
+                            <Camera className="w-5 h-5 inline mr-2" />
+                            Capturar e Analisar
+                          </button>
+                          <button
+                            onClick={stopCamera}
+                            className="p-4 bg-muted text-muted-foreground rounded-2xl hover:bg-muted/80 transition-colors"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
 
-                {!photoDataUrl ? (
-                  <button
-                    onClick={() => photoInputRef.current?.click()}
-                    className="w-full flex flex-col items-center justify-center gap-4 p-10 border-2 border-dashed border-violet-300 rounded-2xl bg-violet-50 text-violet-600 hover:bg-violet-100 transition-colors dark:bg-violet-950/20 dark:border-violet-700 dark:text-violet-400"
-                  >
-                    <Sparkles className="w-12 h-12" />
-                    <div className="text-center">
-                      <p className="font-bold text-lg">Fotografar Balança</p>
-                      <p className="text-sm opacity-70">Aponte para o ecrã da balança</p>
-                    </div>
-                  </button>
-                ) : (
+                {/* Photo captured — show preview + result */}
+                {capturedDataUrl && (
                   <div className="space-y-3">
                     <div className="relative rounded-2xl overflow-hidden bg-black aspect-video">
-                      <img src={photoDataUrl} alt="Foto da balança" className="w-full h-full object-contain" />
+                      <img src={capturedDataUrl} alt="Foto da balança" className="w-full h-full object-contain" />
                       {isAnalyzing && (
-                        <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3">
+                        <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-3">
                           <RefreshCw className="w-8 h-8 text-white animate-spin" />
-                          <p className="text-white font-bold">A analisar com IA...</p>
+                          <p className="text-white font-bold">A analisar com IA…</p>
                         </div>
                       )}
                     </div>
@@ -410,27 +482,22 @@ export default function WeighingPage() {
                       >
                         <div>
                           <p className="text-xs font-bold text-success/70 uppercase tracking-wider">IA detectou</p>
-                          <p className="text-4xl font-display font-black text-success">{aiGrams} <span className="text-lg">g</span></p>
+                          <p className="text-4xl font-display font-black text-success">
+                            {aiGrams} <span className="text-lg">g</span>
+                          </p>
                         </div>
                         <CheckCircle2 className="w-8 h-8 text-success" />
                       </motion.div>
                     )}
 
-                    <div className="flex gap-2">
+                    {!isAnalyzing && (
                       <button
-                        onClick={() => photoInputRef.current?.click()}
-                        disabled={isAnalyzing}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-muted text-muted-foreground font-bold rounded-xl hover:bg-muted/80 transition-colors disabled:opacity-50"
+                        onClick={resetPhoto}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-muted text-muted-foreground font-bold rounded-xl hover:bg-muted/80 transition-colors"
                       >
                         <Camera className="w-4 h-4" /> Nova foto
                       </button>
-                      <button
-                        onClick={() => { setPhotoDataUrl(null); setPhotoBase64(null); setAiGrams(null); }}
-                        className="p-3 bg-muted text-muted-foreground rounded-xl hover:bg-muted/80 transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -448,9 +515,11 @@ export default function WeighingPage() {
               : "bg-muted text-muted-foreground cursor-not-allowed shadow-none"
           }`}
         >
-          {isProcessing ? "A REGISTAR..." : isAnalyzing ? "A LER COM IA..." :
+          {isProcessing ? "A REGISTAR…" :
+           isAnalyzing ? "A LER COM IA…" :
            !activeWorkerId ? "IDENTIFICAR TRABALHADOR" :
-           !weight ? "AGUARDAR LEITURA" : `REGISTAR ${weight.grams}g`}
+           !weight ? "AGUARDAR LEITURA" :
+           `REGISTAR ${weight.grams}g`}
         </button>
 
         {/* Today's History */}
@@ -486,13 +555,13 @@ export default function WeighingPage() {
                       </div>
                       <div className="flex items-center gap-3">
                         <span className={`text-xs font-bold px-2 py-1 rounded ${
+                          record.scaleId?.startsWith("MANUAL-IA") ? "text-violet-600 bg-violet-100 dark:bg-violet-900/30" :
                           record.scaleId?.startsWith("MANUAL") ? "text-orange-600 bg-orange-100 dark:bg-orange-900/30" :
-                          record.scaleId?.startsWith("BAXTRAN") ? "text-success bg-success/10" :
-                          "text-violet-600 bg-violet-100 dark:bg-violet-900/30"
+                          "text-success bg-success/10"
                         }`}>
-                          {record.scaleId?.startsWith("MANUAL-MANUAL") ? "✍ manual" :
-                           record.scaleId?.startsWith("MANUAL-IA") ? "✨ IA" :
-                           record.scaleId?.startsWith("BAXTRAN") ? "⚖ balança" : "OK"}
+                          {record.scaleId?.startsWith("MANUAL-IA") ? "✨ IA" :
+                           record.scaleId?.startsWith("MANUAL") ? "✍ manual" :
+                           "⚖ balança"}
                         </span>
                         <button className="p-2 text-muted-foreground hover:text-destructive transition-colors">
                           <Trash2 className="w-4 h-4" />
