@@ -6,7 +6,7 @@ import { useBeep } from "@/hooks/use-beep";
 import { useListWorkers, useCreateWeighRecord, useListWeighRecords } from "@workspace/api-client-react";
 import {
   Camera, X, User, Scale, AlertCircle, Trash2, CheckCircle2,
-  Keyboard, Sparkles, Usb, RefreshCw, ZapOff,
+  Keyboard, Sparkles, Usb, RefreshCw, ZapOff, ScanLine,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
@@ -14,95 +14,159 @@ import { useToast } from "@/hooks/use-toast";
 
 type WeightMode = "scale" | "manual" | "photo";
 
+/* ─────────────────────────────────────────────
+   Helper: open camera with fallbacks
+───────────────────────────────────────────── */
+async function openCamera(
+  videoEl: HTMLVideoElement,
+  preferRear = true,
+): Promise<MediaStream | null> {
+  const tries: MediaStreamConstraints[] = preferRear
+    ? [
+        { video: { facingMode: { exact: "environment" }, width: { ideal: 1920 } } },
+        { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } } },
+        { video: { facingMode: "environment" } },
+        { video: true },
+      ]
+    : [{ video: true }];
+
+  for (const c of tries) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(c);
+      videoEl.srcObject = stream;
+      videoEl.setAttribute("playsinline", "true");
+      videoEl.muted = true;
+      await videoEl.play().catch(() => {});
+      return stream;
+    } catch {
+      // try next
+    }
+  }
+  return null;
+}
+
 export default function WeighingPage() {
   const { status: scaleStatus, reading } = useScale();
   const beep = useBeep();
   const { toast } = useToast();
 
-  // Worker identification state
+  // ── Worker identification ──
   const [activeWorkerId, setActiveWorkerId] = useState<string | null>(null);
   const [manualIdInput, setManualIdInput] = useState("");
   const [showScanner, setShowScanner] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const lastRecordTimeRef = useRef<number>(0);
 
-  // Weight mode state
+  // ── Weight mode ──
   const [weightMode, setWeightMode] = useState<WeightMode>("scale");
   const [manualGrams, setManualGrams] = useState("");
 
-  // AI / Camera state
+  // ── AI camera ──
   const [cameraActive, setCameraActive] = useState(false);
   const [capturedDataUrl, setCapturedDataUrl] = useState<string | null>(null);
   const [aiGrams, setAiGrams] = useState<number | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const cameraVideoRef = useRef<HTMLVideoElement>(null);
-  const cameraCanvasRef = useRef<HTMLCanvasElement>(null);
-  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const aiVideoRef = useRef<HTMLVideoElement>(null);
+  const aiCanvasRef = useRef<HTMLCanvasElement>(null);
+  const aiStreamRef = useRef<MediaStream | null>(null);
 
   const { data: workers = [] } = useListWorkers();
   const activeWorker = workers.find(w => w.id === activeWorkerId);
 
   const { data: todayRecords = [], refetch: refetchRecords } = useListWeighRecords(
     { workerId: activeWorkerId || undefined, limit: 10 },
-    { query: { enabled: !!activeWorkerId } }
+    { query: { enabled: !!activeWorkerId } },
   );
 
   const createRecord = useCreateWeighRecord();
-  const { videoRef, canvasRef, startScanner, stopScanner, scanFrame } = useQRScanner();
 
-  // Stop camera when leaving photo mode
-  const stopCamera = useCallback(() => {
-    if (cameraStreamRef.current) {
-      cameraStreamRef.current.getTracks().forEach(t => t.stop());
-      cameraStreamRef.current = null;
+  // ── QR Scanner ──
+  // Use a ref so handleQRScan can call startScanner without a circular hook dependency
+  const startScannerRef = useRef<() => void>(() => {});
+
+  const handleQRScan = useCallback((code: string) => {
+    const worker = workers.find(w => w.id === code.trim().toUpperCase());
+    if (worker) {
+      beep("success");
+      setActiveWorkerId(worker.id);
+      setShowScanner(false);
+      toast({ title: "Trabalhador Identificado", description: `${worker.name} (${worker.id})` });
+    } else {
+      beep("error");
+      toast({
+        title: "QR não reconhecido",
+        description: `"${code}" não corresponde a nenhum trabalhador. A continuar a leitura…`,
+        variant: "destructive",
+      });
+      // restart loop — hook stopped after detection
+      setTimeout(() => startScannerRef.current(), 1500);
     }
+  }, [workers, beep, toast]);
+
+  const { videoRef: qrVideoRef, canvasRef: qrCanvasRef, isScanning, error: scannerError, startScanner, stopScanner } =
+    useQRScanner(handleQRScan);
+
+  // Keep ref in sync
+  useEffect(() => { startScannerRef.current = startScanner; }, [startScanner]);
+
+  useEffect(() => {
+    if (showScanner) {
+      startScanner();
+    } else {
+      stopScanner();
+    }
+    return () => stopScanner();
+  }, [showScanner]);
+
+  // ── AI camera helpers ──
+  const stopAiCamera = useCallback(() => {
+    if (aiStreamRef.current) {
+      aiStreamRef.current.getTracks().forEach(t => t.stop());
+      aiStreamRef.current = null;
+    }
+    if (aiVideoRef.current) aiVideoRef.current.srcObject = null;
     setCameraActive(false);
   }, []);
 
-  // Start rear camera
-  const startCamera = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-      });
-      cameraStreamRef.current = stream;
-      if (cameraVideoRef.current) {
-        cameraVideoRef.current.srcObject = stream;
-        cameraVideoRef.current.play();
-      }
+  const startAiCamera = useCallback(async () => {
+    const video = aiVideoRef.current;
+    if (!video) return;
+    const stream = await openCamera(video, true);
+    if (stream) {
+      aiStreamRef.current = stream;
       setCameraActive(true);
-    } catch (err: any) {
+    } else {
       toast({
         title: "Câmara não disponível",
-        description: err?.message || "Não foi possível aceder à câmara. Verifique as permissões.",
+        description: "Verifique as permissões da câmara no browser.",
         variant: "destructive",
       });
     }
   }, [toast]);
 
-  // Cleanup camera on unmount or mode change
+  // Stop AI camera when leaving photo mode
   useEffect(() => {
-    if (weightMode !== "photo") stopCamera();
-  }, [weightMode, stopCamera]);
+    if (weightMode !== "photo") stopAiCamera();
+  }, [weightMode, stopAiCamera]);
+  useEffect(() => () => stopAiCamera(), [stopAiCamera]);
 
-  useEffect(() => () => stopCamera(), [stopCamera]);
-
-  // Capture a frame from video and send to AI
   const captureAndAnalyze = useCallback(async () => {
-    const video = cameraVideoRef.current;
-    const canvas = cameraCanvasRef.current;
+    const video = aiVideoRef.current;
+    const canvas = aiCanvasRef.current;
     if (!video || !canvas) return;
 
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    const w = video.videoWidth || 640;
+    const h = video.videoHeight || 480;
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, 0, 0, w, h);
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
     const base64 = dataUrl.split(",")[1];
     setCapturedDataUrl(dataUrl);
-    stopCamera();
+    stopAiCamera();
 
     setIsAnalyzing(true);
     try {
@@ -115,75 +179,57 @@ export default function WeighingPage() {
       if (json.grams !== null && json.grams !== undefined && !json.error) {
         setAiGrams(json.grams);
         beep("success");
-        toast({ title: "IA leu o peso", description: `${json.grams} gramas detectados.` });
+        toast({ title: `IA leu ${json.grams}g`, description: "Confirme e carregue em REGISTAR." });
       } else {
         beep("warning");
-        const msg = json.error === "OVERLOAD" ? "Overload detectado na balança." :
-                    json.error === "INVALID" ? "Valor inválido ou negativo." :
-                    "Imagem não nítida — tente uma nova foto mais próxima.";
+        const msg =
+          json.error === "OVERLOAD" ? "Overload — retire peso da balança." :
+          json.error === "INVALID" ? "Valor inválido detectado." :
+          "Não foi possível ler o visor — tente uma foto mais próxima e nítida.";
         toast({ title: "IA não conseguiu ler", description: msg, variant: "destructive" });
       }
     } catch {
-      toast({ title: "Erro de comunicação", description: "Falha ao contactar o servidor de IA.", variant: "destructive" });
+      toast({ title: "Erro de rede", description: "Falha ao contactar o servidor de IA.", variant: "destructive" });
     } finally {
       setIsAnalyzing(false);
     }
-  }, [beep, toast, stopCamera]);
+  }, [beep, toast, stopAiCamera]);
 
   const resetPhoto = useCallback(() => {
     setCapturedDataUrl(null);
     setAiGrams(null);
-    stopCamera();
-  }, [stopCamera]);
+  }, []);
 
-  // QR scanner
-  useEffect(() => {
-    if (showScanner) {
-      startScanner();
-      const interval = setInterval(() => {
-        const code = scanFrame();
-        if (code) handleWorkerIdentified(code);
-      }, 500);
-      return () => { clearInterval(interval); stopScanner(); };
-    }
-  }, [showScanner]);
-
-  const handleWorkerIdentified = (id: string) => {
+  // ── Manual ID submit ──
+  const handleManualIdSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const id = manualIdInput.trim().toUpperCase();
+    if (!id) return;
     const worker = workers.find(w => w.id === id);
     if (worker) {
       beep("success");
-      setActiveWorkerId(id);
-      setShowScanner(false);
+      setActiveWorkerId(worker.id);
+      setManualIdInput("");
       toast({ title: "Trabalhador Identificado", description: `${worker.name} (${worker.id})` });
     } else {
       beep("error");
-      toast({ title: "Trabalhador não encontrado", description: `O ID ${id} não existe.`, variant: "destructive" });
-      stopScanner();
-      setTimeout(startScanner, 2000);
+      toast({ title: "ID não encontrado", description: `"${id}" não existe.`, variant: "destructive" });
     }
   };
 
-  const handleManualIdSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (manualIdInput.trim()) {
-      handleWorkerIdentified(manualIdInput.trim().toUpperCase());
-      setManualIdInput("");
-    }
-  };
-
-  const getWeightToRegister = (): { grams: number; source: string } | null => {
+  // ── Weight resolution ──
+  const getWeightToRegister = (): { grams: number; source: WeightMode } | null => {
     if (weightMode === "scale") {
-      if (reading?.status === "STABLE" && reading.weightGrams > 0)
-        return { grams: reading.weightGrams, source: "balança" };
+      if (reading?.status === "STABLE" && reading.weightGrams >= 50) return { grams: reading.weightGrams, source: "scale" };
       return null;
     }
     if (weightMode === "manual") {
       const g = parseInt(manualGrams, 10);
-      if (!isNaN(g) && g > 0) return { grams: g, source: "manual" };
+      if (!isNaN(g) && g >= 50 && g <= 5100) return { grams: g, source: "manual" };
       return null;
     }
     if (weightMode === "photo") {
-      if (aiGrams !== null && aiGrams > 0) return { grams: aiGrams, source: "IA" };
+      if (aiGrams !== null && aiGrams >= 50 && aiGrams <= 5100) return { grams: aiGrams, source: "photo" };
       return null;
     }
     return null;
@@ -194,12 +240,6 @@ export default function WeighingPage() {
     const weight = getWeightToRegister();
     if (!weight) return;
 
-    if (weight.grams < 50 || weight.grams > 5100) {
-      beep("warning");
-      toast({ title: "Peso Inválido", description: "O peso deve estar entre 50g e 5100g.", variant: "destructive" });
-      return;
-    }
-
     const now = Date.now();
     if (now - lastRecordTimeRef.current < 15000) {
       if (!window.confirm("Pesagem muito rápida! Certeza que quer registar outra caixa?")) return;
@@ -207,25 +247,32 @@ export default function WeighingPage() {
 
     setIsProcessing(true);
     try {
+      const scaleId =
+        weight.source === "scale" ? "BAXTRAN-XTA-01" :
+        weight.source === "photo" ? "MANUAL-IA" :
+        "MANUAL-MANUAL";
+      const rawLine =
+        weight.source === "scale" ? (reading?.rawLine ?? "") : `${scaleId}:${weight.grams}g`;
+
       await createRecord.mutateAsync({
         data: {
           workerId: activeWorkerId,
           weightGrams: weight.grams,
           unit: "g",
-          scaleId: weight.source === "balança" ? "BAXTRAN-XTA-01" : `MANUAL-${weight.source.toUpperCase()}`,
-          rawLine: weight.source === "balança" ? (reading?.rawLine ?? "") : `${weight.source}:${weight.grams}g`,
+          scaleId,
+          rawLine,
           timestamp: new Date().toISOString(),
         },
       });
       beep("success");
       lastRecordTimeRef.current = Date.now();
-      refetchRecords();
+      await refetchRecords();
 
       if (weightMode === "manual") setManualGrams("");
       if (weightMode === "photo") resetPhoto();
     } catch {
       beep("error");
-      toast({ title: "Erro ao registar", description: "Verifique a ligação e tente novamente.", variant: "destructive" });
+      toast({ title: "Erro ao registar", description: "Verifique a ligação e tente de novo.", variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
@@ -239,52 +286,97 @@ export default function WeighingPage() {
     <Layout>
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
 
-        {/* Worker Identification */}
+        {/* ══════ WORKER IDENTIFICATION ══════ */}
         <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
           {!activeWorkerId ? (
             <div className="p-6">
               <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-                <User className="text-primary" /> Identificar Trabalhador
+                <User className="text-primary w-5 h-5" /> Identificar Trabalhador
               </h2>
+
               {!showScanner ? (
                 <div className="space-y-4">
                   <button
                     onClick={() => setShowScanner(true)}
-                    className="w-full flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-primary/30 rounded-xl bg-primary/5 text-primary hover:bg-primary/10 transition-colors"
+                    className="w-full flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-primary/40 rounded-2xl bg-primary/5 text-primary hover:bg-primary/10 active:scale-[0.98] transition-all"
                   >
-                    <Camera className="w-10 h-10" />
-                    <span className="font-bold text-lg">Ler QR Code</span>
+                    <ScanLine className="w-12 h-12" />
+                    <span className="font-bold text-xl">Ler QR Code</span>
+                    <span className="text-sm opacity-60">Aponte a câmara para o cartão do trabalhador</span>
                   </button>
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
-                    <div className="relative flex justify-center"><span className="bg-card px-4 text-xs text-muted-foreground font-medium uppercase">OU</span></div>
+
+                  <div className="relative flex items-center gap-3">
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">ou</span>
+                    <div className="flex-1 h-px bg-border" />
                   </div>
+
                   <form onSubmit={handleManualIdSubmit} className="flex gap-2">
                     <input
                       type="text"
                       placeholder="ID do Trabalhador (ex: W001)"
                       value={manualIdInput}
                       onChange={(e) => setManualIdInput(e.target.value)}
-                      className="flex-1 bg-background border-2 border-border rounded-xl px-4 py-3 font-mono uppercase focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
+                      className="flex-1 bg-background border-2 border-border rounded-xl px-4 py-3 font-mono uppercase focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-lg"
                     />
-                    <button type="submit" className="bg-secondary text-secondary-foreground px-6 font-bold rounded-xl hover:bg-secondary/80 transition-colors">
+                    <button type="submit" className="bg-primary text-primary-foreground px-6 font-bold rounded-xl hover:opacity-90 transition-opacity text-lg">
                       OK
                     </button>
                   </form>
                 </div>
               ) : (
-                <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/3]">
-                  <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" />
-                  <canvas ref={canvasRef} className="hidden" />
-                  <div className="absolute inset-0 border-4 border-primary/50 m-8 rounded-xl z-10 pointer-events-none">
-                    <div className="absolute inset-0 bg-primary/10 animate-pulse" />
+                /* QR Scanner View */
+                <div className="space-y-3">
+                  <div className="relative rounded-2xl overflow-hidden bg-black aspect-[4/3]">
+                    <video
+                      ref={qrVideoRef}
+                      className="absolute inset-0 w-full h-full object-cover"
+                      playsInline
+                      muted
+                    />
+                    <canvas ref={qrCanvasRef} className="hidden" />
+
+                    {/* Scanning overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="relative w-56 h-56">
+                        {/* Corner brackets */}
+                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white rounded-tl-lg" />
+                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr-lg" />
+                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white rounded-bl-lg" />
+                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-lg" />
+                        {/* Scanning line */}
+                        {isScanning && (
+                          <motion.div
+                            className="absolute left-2 right-2 h-0.5 bg-primary shadow-[0_0_8px_2px_rgba(var(--primary)/0.8)]"
+                            animate={{ top: ["8%", "92%", "8%"] }}
+                            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Status */}
+                    <div className="absolute top-4 left-0 right-0 flex justify-center">
+                      <span className={`px-4 py-1.5 rounded-full text-xs font-bold backdrop-blur-sm ${
+                        isScanning
+                          ? "bg-success/80 text-white"
+                          : "bg-black/60 text-white"
+                      }`}>
+                        {isScanning ? "A procurar QR Code…" : "A iniciar câmara…"}
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => setShowScanner(false)}
+                      className="absolute top-4 right-4 bg-black/50 text-white p-2.5 rounded-full backdrop-blur-sm z-10"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
                   </div>
-                  <button onClick={() => setShowScanner(false)} className="absolute top-4 right-4 bg-black/50 text-white p-2 rounded-full backdrop-blur-md z-20">
-                    <X />
-                  </button>
-                  <p className="absolute bottom-4 left-0 right-0 text-center text-white font-medium z-20 drop-shadow-md">
-                    Aponte para o QR Code
-                  </p>
+
+                  {scannerError && (
+                    <p className="text-center text-sm text-destructive font-medium">{scannerError}</p>
+                  )}
                 </div>
               )}
             </div>
@@ -297,14 +389,17 @@ export default function WeighingPage() {
                   {activeWorkerId}
                 </span>
               </div>
-              <button onClick={() => setActiveWorkerId(null)} className="bg-white/10 hover:bg-white/20 p-3 rounded-full transition-colors">
+              <button
+                onClick={() => setActiveWorkerId(null)}
+                className="bg-white/10 hover:bg-white/20 p-3 rounded-full transition-colors"
+              >
                 <X className="w-6 h-6" />
               </button>
             </div>
           )}
         </div>
 
-        {/* Weight Input Mode Tabs */}
+        {/* ══════ WEIGHT MODE TABS ══════ */}
         <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
           <div className="flex border-b border-border">
             {([
@@ -327,15 +422,14 @@ export default function WeighingPage() {
           </div>
 
           <div className="p-6">
-
-            {/* ── SCALE MODE ── */}
+            {/* ── SCALE ── */}
             {weightMode === "scale" && (
               <div className="text-center">
                 {scaleStatus === "DISCONNECTED" && (
-                  <div className="flex flex-col items-center gap-3 py-6 text-muted-foreground">
-                    <ZapOff className="w-12 h-12 opacity-40" />
-                    <p className="font-medium">Balança desconectada</p>
-                    <p className="text-xs">Ligue a balança pelo botão no topo da página</p>
+                  <div className="flex flex-col items-center gap-3 py-8 text-muted-foreground">
+                    <ZapOff className="w-14 h-14 opacity-30" />
+                    <p className="font-semibold">Balança desconectada</p>
+                    <p className="text-xs max-w-xs">Ligue a balança pelo botão de ligação no topo da página</p>
                   </div>
                 )}
                 {scaleStatus !== "DISCONNECTED" && (
@@ -371,19 +465,17 @@ export default function WeighingPage() {
               </div>
             )}
 
-            {/* ── MANUAL MODE ── */}
+            {/* ── MANUAL ── */}
             {weightMode === "manual" && (
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground text-center">
-                  Introduza o peso directamente em gramas
-                </p>
+                <p className="text-sm text-muted-foreground text-center">Introduza o peso directamente em gramas</p>
                 <div className="flex gap-3 items-center">
                   <input
                     type="number"
                     inputMode="numeric"
                     placeholder="0"
-                    min={1}
-                    max={9999}
+                    min={50}
+                    max={5100}
                     value={manualGrams}
                     onChange={(e) => setManualGrams(e.target.value)}
                     className="flex-1 text-center text-5xl font-display font-black bg-background border-2 border-border rounded-2xl px-4 py-6 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
@@ -404,54 +496,50 @@ export default function WeighingPage() {
               </div>
             )}
 
-            {/* ── PHOTO / AI MODE ── */}
+            {/* ── AI / PHOTO ── */}
             {weightMode === "photo" && (
               <div className="space-y-4">
-
-                {/* No photo yet — show camera or activate button */}
-                {!capturedDataUrl && (
+                {!capturedDataUrl ? (
                   <>
                     {!cameraActive ? (
                       <button
-                        onClick={startCamera}
-                        className="w-full flex flex-col items-center justify-center gap-4 p-10 border-2 border-dashed border-violet-300 rounded-2xl bg-violet-50 text-violet-600 hover:bg-violet-100 transition-colors dark:bg-violet-950/20 dark:border-violet-700 dark:text-violet-400"
+                        onClick={startAiCamera}
+                        className="w-full flex flex-col items-center justify-center gap-4 p-10 border-2 border-dashed border-violet-400 rounded-2xl bg-violet-50 text-violet-700 hover:bg-violet-100 active:scale-[0.98] transition-all dark:bg-violet-950/20 dark:border-violet-700 dark:text-violet-300"
                       >
-                        <Sparkles className="w-12 h-12" />
+                        <Sparkles className="w-14 h-14" />
                         <div className="text-center">
-                          <p className="font-bold text-lg">Abrir Câmara</p>
-                          <p className="text-sm opacity-70">Aponte para o visor da balança e capture</p>
+                          <p className="font-bold text-xl">Abrir Câmara</p>
+                          <p className="text-sm opacity-60 mt-1">Aponte para o visor da balança e capture</p>
                         </div>
                       </button>
                     ) : (
                       <div className="space-y-3">
                         <div className="relative rounded-2xl overflow-hidden bg-black aspect-video">
                           <video
-                            ref={cameraVideoRef}
+                            ref={aiVideoRef}
                             autoPlay
                             playsInline
                             muted
                             className="w-full h-full object-cover"
                           />
-                          {/* Aiming guide */}
+                          {/* Aim guide */}
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="border-2 border-white/60 rounded-xl w-3/4 h-1/2 opacity-70" />
+                            <div className="border-2 border-white/50 rounded-xl w-3/4 h-2/3 flex items-end justify-center pb-2">
+                              <span className="text-white/60 text-xs font-medium">Centre o visor aqui</span>
+                            </div>
                           </div>
-                          <p className="absolute bottom-3 left-0 right-0 text-center text-white text-xs font-medium drop-shadow">
-                            Centre o visor da balança no rectângulo
-                          </p>
                         </div>
-                        <canvas ref={cameraCanvasRef} className="hidden" />
+                        <canvas ref={aiCanvasRef} className="hidden" />
                         <div className="flex gap-2">
                           <button
                             onClick={captureAndAnalyze}
-                            className="flex-1 py-4 bg-violet-600 text-white font-bold rounded-2xl text-lg hover:bg-violet-700 active:scale-95 transition-all shadow-lg shadow-violet-600/30"
+                            className="flex-1 py-5 bg-violet-600 text-white font-bold rounded-2xl text-xl hover:bg-violet-700 active:scale-[0.97] transition-all shadow-lg shadow-violet-600/30 flex items-center justify-center gap-2"
                           >
-                            <Camera className="w-5 h-5 inline mr-2" />
-                            Capturar e Analisar
+                            <Camera className="w-6 h-6" /> Capturar e Analisar
                           </button>
                           <button
-                            onClick={stopCamera}
-                            className="p-4 bg-muted text-muted-foreground rounded-2xl hover:bg-muted/80 transition-colors"
+                            onClick={stopAiCamera}
+                            className="p-5 bg-muted text-muted-foreground rounded-2xl hover:bg-muted/80 transition-colors"
                           >
                             <X className="w-5 h-5" />
                           </button>
@@ -459,17 +547,15 @@ export default function WeighingPage() {
                       </div>
                     )}
                   </>
-                )}
-
-                {/* Photo captured — show preview + result */}
-                {capturedDataUrl && (
+                ) : (
+                  /* Captured state */
                   <div className="space-y-3">
                     <div className="relative rounded-2xl overflow-hidden bg-black aspect-video">
                       <img src={capturedDataUrl} alt="Foto da balança" className="w-full h-full object-contain" />
                       {isAnalyzing && (
                         <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-3">
-                          <RefreshCw className="w-8 h-8 text-white animate-spin" />
-                          <p className="text-white font-bold">A analisar com IA…</p>
+                          <RefreshCw className="w-10 h-10 text-violet-300 animate-spin" />
+                          <p className="text-white font-bold text-lg">A analisar com IA…</p>
                         </div>
                       )}
                     </div>
@@ -482,20 +568,20 @@ export default function WeighingPage() {
                       >
                         <div>
                           <p className="text-xs font-bold text-success/70 uppercase tracking-wider">IA detectou</p>
-                          <p className="text-4xl font-display font-black text-success">
-                            {aiGrams} <span className="text-lg">g</span>
+                          <p className="text-5xl font-display font-black text-success leading-none mt-1">
+                            {aiGrams}<span className="text-xl ml-1">g</span>
                           </p>
                         </div>
-                        <CheckCircle2 className="w-8 h-8 text-success" />
+                        <CheckCircle2 className="w-10 h-10 text-success" />
                       </motion.div>
                     )}
 
                     {!isAnalyzing && (
                       <button
-                        onClick={resetPhoto}
+                        onClick={() => { resetPhoto(); startAiCamera(); }}
                         className="w-full flex items-center justify-center gap-2 py-3 bg-muted text-muted-foreground font-bold rounded-xl hover:bg-muted/80 transition-colors"
                       >
-                        <Camera className="w-4 h-4" /> Nova foto
+                        <Camera className="w-4 h-4" /> Tirar nova foto
                       </button>
                     )}
                   </div>
@@ -505,13 +591,13 @@ export default function WeighingPage() {
           </div>
         </div>
 
-        {/* Big Action Button */}
+        {/* ══════ REGISTER BUTTON ══════ */}
         <button
           onClick={handleWeigh}
           disabled={!canWeigh}
-          className={`w-full py-6 rounded-2xl font-display font-black text-2xl sm:text-3xl transition-all duration-300 shadow-xl ${
+          className={`w-full py-7 rounded-2xl font-display font-black text-2xl sm:text-3xl transition-all duration-300 shadow-xl ${
             canWeigh
-              ? "bg-gradient-to-b from-success to-emerald-600 text-white shadow-success/30 hover:shadow-success/40 hover:-translate-y-1 active:translate-y-0 active:shadow-md"
+              ? "bg-gradient-to-b from-success to-emerald-600 text-white shadow-success/30 hover:shadow-success/50 hover:-translate-y-1 active:translate-y-0 active:shadow-md"
               : "bg-muted text-muted-foreground cursor-not-allowed shadow-none"
           }`}
         >
@@ -519,10 +605,10 @@ export default function WeighingPage() {
            isAnalyzing ? "A LER COM IA…" :
            !activeWorkerId ? "IDENTIFICAR TRABALHADOR" :
            !weight ? "AGUARDAR LEITURA" :
-           `REGISTAR ${weight.grams}g`}
+           `REGISTAR  ${weight.grams} g`}
         </button>
 
-        {/* Today's History */}
+        {/* ══════ TODAY'S HISTORY ══════ */}
         {activeWorkerId && (
           <div className="bg-card rounded-2xl shadow-sm border border-border p-6">
             <div className="flex justify-between items-end mb-4">
@@ -537,7 +623,7 @@ export default function WeighingPage() {
 
             {todayRecords.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground border-2 border-dashed border-border rounded-xl">
-                Nenhum registo ainda.
+                Nenhum registo ainda hoje.
               </div>
             ) : (
               <div className="space-y-3">
@@ -545,25 +631,29 @@ export default function WeighingPage() {
                   {todayRecords.map((record) => (
                     <motion.div
                       key={record.id}
-                      initial={{ opacity: 0, height: 0, y: -20 }}
-                      animate={{ opacity: 1, height: "auto", y: 0 }}
+                      initial={{ opacity: 0, y: -16 }}
+                      animate={{ opacity: 1, y: 0 }}
                       className="flex items-center justify-between p-4 bg-background border border-border rounded-xl"
                     >
                       <div>
-                        <p className="font-mono text-xl font-bold text-foreground">{record.weightGrams} g</p>
-                        <p className="text-xs text-muted-foreground">{format(new Date(record.timestamp), "HH:mm:ss")}</p>
+                        <p className="font-mono text-2xl font-bold text-foreground leading-none">{record.weightGrams} g</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {format(new Date(record.timestamp), "HH:mm:ss")}
+                        </p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className={`text-xs font-bold px-2 py-1 rounded ${
-                          record.scaleId?.startsWith("MANUAL-IA") ? "text-violet-600 bg-violet-100 dark:bg-violet-900/30" :
-                          record.scaleId?.startsWith("MANUAL") ? "text-orange-600 bg-orange-100 dark:bg-orange-900/30" :
-                          "text-success bg-success/10"
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                          record.scaleId?.includes("IA")
+                            ? "text-violet-700 bg-violet-100 dark:bg-violet-900/40 dark:text-violet-300"
+                            : record.scaleId?.includes("MANUAL")
+                            ? "text-orange-700 bg-orange-100 dark:bg-orange-900/40 dark:text-orange-300"
+                            : "text-green-700 bg-green-100 dark:bg-green-900/40 dark:text-green-300"
                         }`}>
-                          {record.scaleId?.startsWith("MANUAL-IA") ? "✨ IA" :
-                           record.scaleId?.startsWith("MANUAL") ? "✍ manual" :
+                          {record.scaleId?.includes("IA") ? "✨ IA" :
+                           record.scaleId?.includes("MANUAL") ? "✍ manual" :
                            "⚖ balança"}
                         </span>
-                        <button className="p-2 text-muted-foreground hover:text-destructive transition-colors">
+                        <button className="p-2 text-muted-foreground hover:text-destructive transition-colors rounded-lg hover:bg-destructive/10">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
