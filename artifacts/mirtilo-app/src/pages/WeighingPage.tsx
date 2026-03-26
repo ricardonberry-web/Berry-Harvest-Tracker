@@ -190,15 +190,19 @@ export default function WeighingPage() {
     const canvas = aiCanvasRef.current;
     if (!video || !canvas) return;
 
-    const w = video.videoWidth || 640;
-    const h = video.videoHeight || 480;
-    canvas.width = w;
-    canvas.height = h;
+    // Resize to max 1280px wide to keep payload under the server limit
+    const MAX_WIDTH = 1280;
+    const srcW = video.videoWidth || 640;
+    const srcH = video.videoHeight || 480;
+    const scale = Math.min(1, MAX_WIDTH / srcW);
+    canvas.width = Math.round(srcW * scale);
+    canvas.height = Math.round(srcH * scale);
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0, w, h);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    // JPEG quality 0.75 — good enough for digit reading, ~3–4× smaller than 0.92
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
     const base64 = dataUrl.split(",")[1];
     setCapturedDataUrl(dataUrl);
     stopAiCamera();
