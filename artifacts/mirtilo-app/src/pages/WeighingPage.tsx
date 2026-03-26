@@ -124,27 +124,62 @@ export default function WeighingPage() {
       aiStreamRef.current.getTracks().forEach(t => t.stop());
       aiStreamRef.current = null;
     }
-    if (aiVideoRef.current) aiVideoRef.current.srcObject = null;
+    if (aiVideoRef.current) {
+      aiVideoRef.current.srcObject = null;
+      aiVideoRef.current.load();
+    }
     setCameraActive(false);
   }, []);
 
   const startAiCamera = useCallback(async () => {
+    // The <video> is always mounted (hidden), so ref is always available
     const video = aiVideoRef.current;
-    if (!video) return;
-    const stream = await openCamera(video, true);
-    if (stream) {
-      aiStreamRef.current = stream;
-      setCameraActive(true);
-    } else {
+    if (!video) {
+      toast({ title: "Câmara não disponível", description: "Elemento de vídeo não encontrado.", variant: "destructive" });
+      return;
+    }
+    // Show the camera UI first
+    setCameraActive(true);
+
+    const tries: MediaStreamConstraints[] = [
+      { video: { facingMode: { exact: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
+      { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { video: { facingMode: "environment" } },
+      { video: true },
+    ];
+
+    let stream: MediaStream | null = null;
+    for (const c of tries) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(c);
+        break;
+      } catch {
+        // try next constraint
+      }
+    }
+
+    if (!stream) {
+      setCameraActive(false);
       toast({
         title: "Câmara não disponível",
-        description: "Verifique as permissões da câmara no browser.",
+        description: "Verifique as permissões da câmara nas definições do browser.",
         variant: "destructive",
       });
+      return;
+    }
+
+    aiStreamRef.current = stream;
+    video.srcObject = stream;
+    video.setAttribute("playsinline", "true");
+    video.muted = true;
+    try {
+      await video.play();
+    } catch {
+      // Some browsers need a user gesture; video will play on next interaction
     }
   }, [toast]);
 
-  // Stop AI camera when leaving photo mode
+  // Stop AI camera when leaving photo mode or unmounting
   useEffect(() => {
     if (weightMode !== "photo") stopAiCamera();
   }, [weightMode, stopAiCamera]);
@@ -499,56 +534,64 @@ export default function WeighingPage() {
             {/* ── AI / PHOTO ── */}
             {weightMode === "photo" && (
               <div className="space-y-4">
-                {!capturedDataUrl ? (
-                  <>
-                    {!cameraActive ? (
-                      <button
-                        onClick={startAiCamera}
-                        className="w-full flex flex-col items-center justify-center gap-4 p-10 border-2 border-dashed border-violet-400 rounded-2xl bg-violet-50 text-violet-700 hover:bg-violet-100 active:scale-[0.98] transition-all dark:bg-violet-950/20 dark:border-violet-700 dark:text-violet-300"
-                      >
-                        <Sparkles className="w-14 h-14" />
-                        <div className="text-center">
-                          <p className="font-bold text-xl">Abrir Câmara</p>
-                          <p className="text-sm opacity-60 mt-1">Aponte para o visor da balança e capture</p>
-                        </div>
-                      </button>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="relative rounded-2xl overflow-hidden bg-black aspect-video">
-                          <video
-                            ref={aiVideoRef}
-                            autoPlay
-                            playsInline
-                            muted
-                            className="w-full h-full object-cover"
-                          />
-                          {/* Aim guide */}
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="border-2 border-white/50 rounded-xl w-3/4 h-2/3 flex items-end justify-center pb-2">
-                              <span className="text-white/60 text-xs font-medium">Centre o visor aqui</span>
-                            </div>
-                          </div>
-                        </div>
-                        <canvas ref={aiCanvasRef} className="hidden" />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={captureAndAnalyze}
-                            className="flex-1 py-5 bg-violet-600 text-white font-bold rounded-2xl text-xl hover:bg-violet-700 active:scale-[0.97] transition-all shadow-lg shadow-violet-600/30 flex items-center justify-center gap-2"
-                          >
-                            <Camera className="w-6 h-6" /> Capturar e Analisar
-                          </button>
-                          <button
-                            onClick={stopAiCamera}
-                            className="p-5 bg-muted text-muted-foreground rounded-2xl hover:bg-muted/80 transition-colors"
-                          >
-                            <X className="w-5 h-5" />
-                          </button>
-                        </div>
+
+                {/*
+                  The video + canvas are ALWAYS in the DOM while in photo mode,
+                  so aiVideoRef / aiCanvasRef are never null when startAiCamera() runs.
+                  Visibility is toggled purely with CSS (no conditional unmount).
+                */}
+
+                {/* Live camera view — visible only when active and no photo taken yet */}
+                <div className={cameraActive && !capturedDataUrl ? "space-y-3" : "hidden"}>
+                  <div className="relative rounded-2xl overflow-hidden bg-black aspect-video">
+                    <video
+                      ref={aiVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="border-2 border-white/50 rounded-xl w-3/4 h-2/3 flex items-end justify-center pb-2">
+                        <span className="text-white/60 text-xs font-medium">Centre o visor aqui</span>
                       </div>
-                    )}
-                  </>
-                ) : (
-                  /* Captured state */
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={captureAndAnalyze}
+                      className="flex-1 py-5 bg-violet-600 text-white font-bold rounded-2xl text-xl hover:bg-violet-700 active:scale-[0.97] transition-all shadow-lg shadow-violet-600/30 flex items-center justify-center gap-2"
+                    >
+                      <Camera className="w-6 h-6" /> Capturar e Analisar
+                    </button>
+                    <button
+                      onClick={stopAiCamera}
+                      className="p-5 bg-muted text-muted-foreground rounded-2xl hover:bg-muted/80 transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Canvas always hidden — used only for capturing frames */}
+                <canvas ref={aiCanvasRef} className="hidden" />
+
+                {/* "Open camera" button — visible when camera not yet active and no photo */}
+                {!cameraActive && !capturedDataUrl && (
+                  <button
+                    onClick={startAiCamera}
+                    className="w-full flex flex-col items-center justify-center gap-4 p-10 border-2 border-dashed border-violet-400 rounded-2xl bg-violet-50 text-violet-700 hover:bg-violet-100 active:scale-[0.98] transition-all dark:bg-violet-950/20 dark:border-violet-700 dark:text-violet-300"
+                  >
+                    <Sparkles className="w-14 h-14" />
+                    <div className="text-center">
+                      <p className="font-bold text-xl">Abrir Câmara</p>
+                      <p className="text-sm opacity-60 mt-1">Aponte para o visor da balança e capture</p>
+                    </div>
+                  </button>
+                )}
+
+                {/* Captured photo + AI result */}
+                {capturedDataUrl && (
                   <div className="space-y-3">
                     <div className="relative rounded-2xl overflow-hidden bg-black aspect-video">
                       <img src={capturedDataUrl} alt="Foto da balança" className="w-full h-full object-contain" />
@@ -586,6 +629,7 @@ export default function WeighingPage() {
                     )}
                   </div>
                 )}
+
               </div>
             )}
           </div>
