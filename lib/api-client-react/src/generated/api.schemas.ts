@@ -67,6 +67,33 @@ export interface WorkerDailyStats {
   rankKg: number;
 }
 
+export interface AttendanceEntry {
+  workerId: string;
+  workerName: string;
+  /** ISO date YYYY-MM-DD */
+  date: string;
+  /** @nullable */
+  checkInAt: string | null;
+  /** @nullable */
+  checkOutAt: string | null;
+  /**
+   * Hours between check-in and check-out (null if not yet checked out)
+   * @nullable
+   */
+  hoursWorked: number | null;
+}
+
+export interface AttendanceMutationBody {
+  workerId: string;
+  /** ISO date YYYY-MM-DD (defaults to today) */
+  date?: string;
+}
+
+export interface AttendanceBulkBody {
+  /** ISO date YYYY-MM-DD (defaults to today) */
+  date?: string;
+}
+
 export interface DailyReport {
   date: string;
   workers: WorkerDailyStats[];
@@ -81,6 +108,13 @@ export type ListWeighRecordsParams = {
    */
   date?: string;
   limit?: number;
+};
+
+export type ListAttendanceParams = {
+  /**
+   * ISO date YYYY-MM-DD (defaults to today)
+   */
+  date?: string;
 };
 
 export type GetDailyReportParams = {

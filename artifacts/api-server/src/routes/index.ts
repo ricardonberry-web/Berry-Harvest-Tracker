@@ -3,7 +3,7 @@ import healthRouter from "./health";
 import workersRouter from "./workers";
 import weighRecordsRouter from "./weighRecords";
 import reportsRouter from "./reports";
-import scalePhotoRouter from "./scalePhoto";
+import attendanceRouter from "./attendance";
 
 const router: IRouter = Router();
 
@@ -11,6 +11,6 @@ router.use(healthRouter);
 router.use(workersRouter);
 router.use(weighRecordsRouter);
 router.use(reportsRouter);
-router.use(scalePhotoRouter);
+router.use(attendanceRouter);
 
 export default router;

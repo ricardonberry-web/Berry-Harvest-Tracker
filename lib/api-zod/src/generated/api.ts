@@ -116,6 +116,131 @@ export const DeleteWeighRecordParams = zod.object({
 });
 
 /**
+ * @summary List worker attendance for a given day (defaults to today)
+ */
+export const ListAttendanceQueryParams = zod.object({
+  date: zod.coerce
+    .string()
+    .optional()
+    .describe("ISO date YYYY-MM-DD (defaults to today)"),
+});
+
+export const ListAttendanceResponseItem = zod.object({
+  workerId: zod.string(),
+  workerName: zod.string(),
+  date: zod.string().describe("ISO date YYYY-MM-DD"),
+  checkInAt: zod.date().nullable(),
+  checkOutAt: zod.date().nullable(),
+  hoursWorked: zod
+    .number()
+    .nullable()
+    .describe(
+      "Hours between check-in and check-out (null if not yet checked out)",
+    ),
+});
+export const ListAttendanceResponse = zod.array(ListAttendanceResponseItem);
+
+/**
+ * @summary Check in a single worker for the day
+ */
+export const CheckInWorkerBody = zod.object({
+  workerId: zod.string(),
+  date: zod
+    .string()
+    .optional()
+    .describe("ISO date YYYY-MM-DD (defaults to today)"),
+});
+
+export const CheckInWorkerResponse = zod.object({
+  workerId: zod.string(),
+  workerName: zod.string(),
+  date: zod.string().describe("ISO date YYYY-MM-DD"),
+  checkInAt: zod.date().nullable(),
+  checkOutAt: zod.date().nullable(),
+  hoursWorked: zod
+    .number()
+    .nullable()
+    .describe(
+      "Hours between check-in and check-out (null if not yet checked out)",
+    ),
+});
+
+/**
+ * @summary Check out a single worker for the day
+ */
+export const CheckOutWorkerBody = zod.object({
+  workerId: zod.string(),
+  date: zod
+    .string()
+    .optional()
+    .describe("ISO date YYYY-MM-DD (defaults to today)"),
+});
+
+export const CheckOutWorkerResponse = zod.object({
+  workerId: zod.string(),
+  workerName: zod.string(),
+  date: zod.string().describe("ISO date YYYY-MM-DD"),
+  checkInAt: zod.date().nullable(),
+  checkOutAt: zod.date().nullable(),
+  hoursWorked: zod
+    .number()
+    .nullable()
+    .describe(
+      "Hours between check-in and check-out (null if not yet checked out)",
+    ),
+});
+
+/**
+ * @summary Check in all active workers for the day
+ */
+export const CheckInAllBody = zod.object({
+  date: zod
+    .string()
+    .optional()
+    .describe("ISO date YYYY-MM-DD (defaults to today)"),
+});
+
+export const CheckInAllResponseItem = zod.object({
+  workerId: zod.string(),
+  workerName: zod.string(),
+  date: zod.string().describe("ISO date YYYY-MM-DD"),
+  checkInAt: zod.date().nullable(),
+  checkOutAt: zod.date().nullable(),
+  hoursWorked: zod
+    .number()
+    .nullable()
+    .describe(
+      "Hours between check-in and check-out (null if not yet checked out)",
+    ),
+});
+export const CheckInAllResponse = zod.array(CheckInAllResponseItem);
+
+/**
+ * @summary Check out all currently checked-in workers for the day
+ */
+export const CheckOutAllBody = zod.object({
+  date: zod
+    .string()
+    .optional()
+    .describe("ISO date YYYY-MM-DD (defaults to today)"),
+});
+
+export const CheckOutAllResponseItem = zod.object({
+  workerId: zod.string(),
+  workerName: zod.string(),
+  date: zod.string().describe("ISO date YYYY-MM-DD"),
+  checkInAt: zod.date().nullable(),
+  checkOutAt: zod.date().nullable(),
+  hoursWorked: zod
+    .number()
+    .nullable()
+    .describe(
+      "Hours between check-in and check-out (null if not yet checked out)",
+    ),
+});
+export const CheckOutAllResponse = zod.array(CheckOutAllResponseItem);
+
+/**
  * @summary Get daily productivity ranking
  */
 export const GetDailyReportQueryParams = zod.object({

@@ -17,6 +17,9 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AttendanceBulkBody,
+  AttendanceEntry,
+  AttendanceMutationBody,
   CreateWeighRecordBody,
   CreateWorkerBody,
   DailyReport,
@@ -24,6 +27,7 @@ import type {
   ExportRecordsParams,
   GetDailyReportParams,
   HealthStatus,
+  ListAttendanceParams,
   ListWeighRecordsParams,
   UpdateWorkerBody,
   WeighRecord,
@@ -794,6 +798,444 @@ export const useDeleteWeighRecord = <
   TContext
 > => {
   return useMutation(getDeleteWeighRecordMutationOptions(options));
+};
+
+/**
+ * @summary List worker attendance for a given day (defaults to today)
+ */
+export const getListAttendanceUrl = (params?: ListAttendanceParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/attendance?${stringifiedParams}`
+    : `/api/attendance`;
+};
+
+export const listAttendance = async (
+  params?: ListAttendanceParams,
+  options?: RequestInit,
+): Promise<AttendanceEntry[]> => {
+  return customFetch<AttendanceEntry[]>(getListAttendanceUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAttendanceQueryKey = (params?: ListAttendanceParams) => {
+  return [`/api/attendance`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAttendanceQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAttendance>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAttendanceParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAttendance>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAttendanceQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAttendance>>> = ({
+    signal,
+  }) => listAttendance(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAttendance>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAttendanceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAttendance>>
+>;
+export type ListAttendanceQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List worker attendance for a given day (defaults to today)
+ */
+
+export function useListAttendance<
+  TData = Awaited<ReturnType<typeof listAttendance>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListAttendanceParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAttendance>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAttendanceQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Check in a single worker for the day
+ */
+export const getCheckInWorkerUrl = () => {
+  return `/api/attendance/check-in`;
+};
+
+export const checkInWorker = async (
+  attendanceMutationBody: AttendanceMutationBody,
+  options?: RequestInit,
+): Promise<AttendanceEntry> => {
+  return customFetch<AttendanceEntry>(getCheckInWorkerUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(attendanceMutationBody),
+  });
+};
+
+export const getCheckInWorkerMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkInWorker>>,
+    TError,
+    { data: BodyType<AttendanceMutationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof checkInWorker>>,
+  TError,
+  { data: BodyType<AttendanceMutationBody> },
+  TContext
+> => {
+  const mutationKey = ["checkInWorker"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof checkInWorker>>,
+    { data: BodyType<AttendanceMutationBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return checkInWorker(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CheckInWorkerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof checkInWorker>>
+>;
+export type CheckInWorkerMutationBody = BodyType<AttendanceMutationBody>;
+export type CheckInWorkerMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Check in a single worker for the day
+ */
+export const useCheckInWorker = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkInWorker>>,
+    TError,
+    { data: BodyType<AttendanceMutationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof checkInWorker>>,
+  TError,
+  { data: BodyType<AttendanceMutationBody> },
+  TContext
+> => {
+  return useMutation(getCheckInWorkerMutationOptions(options));
+};
+
+/**
+ * @summary Check out a single worker for the day
+ */
+export const getCheckOutWorkerUrl = () => {
+  return `/api/attendance/check-out`;
+};
+
+export const checkOutWorker = async (
+  attendanceMutationBody: AttendanceMutationBody,
+  options?: RequestInit,
+): Promise<AttendanceEntry> => {
+  return customFetch<AttendanceEntry>(getCheckOutWorkerUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(attendanceMutationBody),
+  });
+};
+
+export const getCheckOutWorkerMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkOutWorker>>,
+    TError,
+    { data: BodyType<AttendanceMutationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof checkOutWorker>>,
+  TError,
+  { data: BodyType<AttendanceMutationBody> },
+  TContext
+> => {
+  const mutationKey = ["checkOutWorker"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof checkOutWorker>>,
+    { data: BodyType<AttendanceMutationBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return checkOutWorker(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CheckOutWorkerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof checkOutWorker>>
+>;
+export type CheckOutWorkerMutationBody = BodyType<AttendanceMutationBody>;
+export type CheckOutWorkerMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Check out a single worker for the day
+ */
+export const useCheckOutWorker = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkOutWorker>>,
+    TError,
+    { data: BodyType<AttendanceMutationBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof checkOutWorker>>,
+  TError,
+  { data: BodyType<AttendanceMutationBody> },
+  TContext
+> => {
+  return useMutation(getCheckOutWorkerMutationOptions(options));
+};
+
+/**
+ * @summary Check in all active workers for the day
+ */
+export const getCheckInAllUrl = () => {
+  return `/api/attendance/check-in-all`;
+};
+
+export const checkInAll = async (
+  attendanceBulkBody?: AttendanceBulkBody,
+  options?: RequestInit,
+): Promise<AttendanceEntry[]> => {
+  return customFetch<AttendanceEntry[]>(getCheckInAllUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(attendanceBulkBody),
+  });
+};
+
+export const getCheckInAllMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkInAll>>,
+    TError,
+    { data: BodyType<AttendanceBulkBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof checkInAll>>,
+  TError,
+  { data: BodyType<AttendanceBulkBody> },
+  TContext
+> => {
+  const mutationKey = ["checkInAll"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof checkInAll>>,
+    { data: BodyType<AttendanceBulkBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return checkInAll(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CheckInAllMutationResult = NonNullable<
+  Awaited<ReturnType<typeof checkInAll>>
+>;
+export type CheckInAllMutationBody = BodyType<AttendanceBulkBody>;
+export type CheckInAllMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Check in all active workers for the day
+ */
+export const useCheckInAll = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkInAll>>,
+    TError,
+    { data: BodyType<AttendanceBulkBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof checkInAll>>,
+  TError,
+  { data: BodyType<AttendanceBulkBody> },
+  TContext
+> => {
+  return useMutation(getCheckInAllMutationOptions(options));
+};
+
+/**
+ * @summary Check out all currently checked-in workers for the day
+ */
+export const getCheckOutAllUrl = () => {
+  return `/api/attendance/check-out-all`;
+};
+
+export const checkOutAll = async (
+  attendanceBulkBody?: AttendanceBulkBody,
+  options?: RequestInit,
+): Promise<AttendanceEntry[]> => {
+  return customFetch<AttendanceEntry[]>(getCheckOutAllUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(attendanceBulkBody),
+  });
+};
+
+export const getCheckOutAllMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkOutAll>>,
+    TError,
+    { data: BodyType<AttendanceBulkBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof checkOutAll>>,
+  TError,
+  { data: BodyType<AttendanceBulkBody> },
+  TContext
+> => {
+  const mutationKey = ["checkOutAll"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof checkOutAll>>,
+    { data: BodyType<AttendanceBulkBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return checkOutAll(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CheckOutAllMutationResult = NonNullable<
+  Awaited<ReturnType<typeof checkOutAll>>
+>;
+export type CheckOutAllMutationBody = BodyType<AttendanceBulkBody>;
+export type CheckOutAllMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Check out all currently checked-in workers for the day
+ */
+export const useCheckOutAll = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkOutAll>>,
+    TError,
+    { data: BodyType<AttendanceBulkBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof checkOutAll>>,
+  TError,
+  { data: BodyType<AttendanceBulkBody> },
+  TContext
+> => {
+  return useMutation(getCheckOutAllMutationOptions(options));
 };
 
 /**

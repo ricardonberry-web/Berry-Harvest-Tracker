@@ -8,6 +8,7 @@ import { ChecklistModal } from "@/components/ChecklistModal";
 import WeighingPage from "@/pages/WeighingPage";
 import RankingPage from "@/pages/RankingPage";
 import WorkersPage from "@/pages/WorkersPage";
+import AttendancePage from "@/pages/AttendancePage";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -23,6 +24,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={WeighingPage} />
+      <Route path="/attendance" component={AttendancePage} />
       <Route path="/ranking" component={RankingPage} />
       <Route path="/workers" component={WorkersPage} />
       <Route component={NotFound} />

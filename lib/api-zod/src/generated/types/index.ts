@@ -6,6 +6,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
+export * from "./attendanceBulkBody";
+export * from "./attendanceEntry";
+export * from "./attendanceMutationBody";
 export * from "./createWeighRecordBody";
 export * from "./createWorkerBody";
 export * from "./dailyReport";
@@ -13,6 +16,7 @@ export * from "./errorResponse";
 export * from "./exportRecordsParams";
 export * from "./getDailyReportParams";
 export * from "./healthStatus";
+export * from "./listAttendanceParams";
 export * from "./listWeighRecordsParams";
 export * from "./updateWorkerBody";
 export * from "./weighRecord";

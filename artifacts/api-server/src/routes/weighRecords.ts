@@ -1,6 +1,13 @@
 import { Router, type IRouter } from "express";
 import { eq, and, gte, lt, desc } from "drizzle-orm";
-import { db, weighRecordsTable, workersTable } from "@workspace/db";
+import { db, weighRecordsTable, workersTable, attendanceTable } from "@workspace/db";
+
+function todayISO(date: Date = new Date()): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 import {
   CreateWeighRecordBody,
   DeleteWeighRecordParams,
@@ -69,6 +76,21 @@ router.post("/weigh-records", async (req, res): Promise<void> => {
   }
 
   const { workerId, weightGrams, unit, scaleId, rawLine, timestamp } = parsed.data;
+
+  // Reject if worker hasn't checked in today (or has already checked out)
+  const recordDate = todayISO(timestamp ? new Date(timestamp) : new Date());
+  const [att] = await db
+    .select()
+    .from(attendanceTable)
+    .where(and(eq(attendanceTable.workerId, workerId), eq(attendanceTable.date, recordDate)));
+  if (!att) {
+    res.status(403).json({ error: "Trabalhador sem entrada registada para hoje." });
+    return;
+  }
+  if (att.checkOutAt) {
+    res.status(403).json({ error: "Trabalhador já deu saída — registe nova entrada para pesar." });
+    return;
+  }
 
   const [record] = await db
     .insert(weighRecordsTable)

@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Scale, Trophy, Users, Usb } from "lucide-react";
+import { Scale, Trophy, Users, Usb, Clock } from "lucide-react";
 import { useScale } from "@/hooks/use-scale";
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -29,10 +29,10 @@ export function Layout({ children }: { children: ReactNode }) {
               status === 'ERROR' ? 'text-destructive' : 
               'text-muted-foreground'
             }`}>
-              {isConnected ? 'Balança Conectada' : 
+              {isConnected ? 'FFN Baxtran Conectada' : 
                isConnecting ? 'A conectar...' : 
                status === 'ERROR' ? (error || 'Erro na balança') : 
-               'Balança Desconectada'}
+               'FFN Baxtran Desconectada'}
             </p>
           </div>
         </div>
@@ -45,7 +45,7 @@ export function Layout({ children }: { children: ReactNode }) {
               : 'bg-primary text-primary-foreground shadow-md hover:shadow-lg hover:-translate-y-0.5'
           }`}
         >
-          {isConnected ? 'Desligar' : 'Ligar Balança'}
+          {isConnected ? 'Desligar' : 'Ligar FFN Baxtran'}
         </button>
       </header>
 
@@ -58,6 +58,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <nav className="fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-xl border-t border-border z-40 pb-safe">
         <div className="max-w-md mx-auto flex justify-around p-2">
           <NavItem href="/" icon={<Scale />} label="Pesar" active={location === "/"} />
+          <NavItem href="/attendance" icon={<Clock />} label="Entrada/Saída" active={location === "/attendance"} />
           <NavItem href="/ranking" icon={<Trophy />} label="Ranking" active={location === "/ranking"} />
           <NavItem href="/workers" icon={<Users />} label="Trabalhadores" active={location === "/workers"} />
         </div>

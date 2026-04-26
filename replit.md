@@ -2,7 +2,7 @@
 
 ## Visão Geral
 
-PWA para Android (Chrome) que regista pesagens de caixas de mirtilo em campo. Comunica com uma balança Baxtran XTA via RS-232 (USB-OTG + conversor FTDI) usando a Web Serial API. Trabalhadores identificados por QR code; ranking diário e exportação CSV.
+PWA para Android (Chrome) que regista pesagens de caixas de mirtilo em campo. Comunica com uma balança **FFN Baxtran** via RS-232 (USB-OTG + conversor FTDI) usando a Web Serial API. Trabalhadores identificados por QR code; só são autorizadas pesagens de quem deu entrada nesse dia. Ranking diário e exportação CSV.
 
 ## Stack
 
@@ -33,6 +33,7 @@ PWA para Android (Chrome) que regista pesagens de caixas de mirtilo em campo. Co
 **Tabelas:**
 - `workers` — trabalhadores (id, name, active, createdAt)
 - `weigh_records` — pesagens (id, workerId, weightGrams, unit, scaleId, rawLine, timestamp)
+- `worker_attendance` — entradas/saídas diárias (id, workerId, date, checkInAt, checkOutAt). Único por (workerId, date).
 
 **Seed inicial:** W001–W004 (Maria Silva, João Costa, Ana Pereira, Carlos Matos)
 
@@ -44,54 +45,66 @@ PWA para Android (Chrome) que regista pesagens de caixas de mirtilo em campo. Co
 | GET | `/api/workers` | Lista trabalhadores |
 | POST | `/api/workers` | Cria trabalhador |
 | GET | `/api/workers/:id` | Trabalhador por ID |
-| PUT | `/api/workers/:id` | Actualiza trabalhador |
+| PATCH | `/api/workers/:id` | Actualiza trabalhador |
+| DELETE | `/api/workers/:id` | Remove trabalhador |
 | GET | `/api/weigh-records` | Lista pesagens (filtros: workerId, date, limit) |
-| POST | `/api/weigh-records` | Regista pesagem |
+| POST | `/api/weigh-records` | Regista pesagem (rejeita 403 se trabalhador sem entrada) |
 | DELETE | `/api/weigh-records/:id` | Remove pesagem |
+| GET | `/api/attendance?date=` | Lista entradas/saídas de um dia (default: hoje) |
+| POST | `/api/attendance/check-in` | Entrada de um trabalhador |
+| POST | `/api/attendance/check-out` | Saída de um trabalhador |
+| POST | `/api/attendance/check-in-all` | Entrada de TODOS os activos |
+| POST | `/api/attendance/check-out-all` | Saída de TODOS os que estão no terreno |
 | GET | `/api/reports/daily?date=YYYY-MM-DD` | Ranking diário por kg |
 | GET | `/api/reports/export?date=YYYY-MM-DD` | Exporta CSV |
 
 ## Frontend — Páginas
 
-- **`/`** — Página de pesagem: identificação do trabalhador (QR ou manual), leitura ao vivo da balança, botão de registo, histórico do dia
-- **`/ranking`** — Ranking diário: tabela por trabalhador com total kg, caixas, média, caixas/hora; exportação CSV
-- **`/workers`** — Gestão de trabalhadores: listagem, pesquisa, criação, visualização e impressão de badges QR
+- **`/`** — Pesagem: identificação do trabalhador (QR ou manual), modos Balança e Manual, botão de registo, histórico do dia. Bloqueia se o trabalhador não tem entrada nesse dia.
+- **`/attendance`** — Entradas/Saídas diárias: lista de trabalhadores, botões individuais e bulk "Entrada/Saída — Todos", contagem de horas trabalhadas.
+- **`/ranking`** — Ranking diário: tabela por trabalhador (kg, caixas, média, caixas/hora); exportação CSV
+- **`/workers`** — Gestão de trabalhadores: listagem, pesquisa, criação, badges QR
 
 ## Componentes-chave
 
 - `ChecklistModal.tsx` — Modal de verificação diária obrigatório (localStorage para controlo diário)
-- `Layout.tsx` — Header com estado da balança + navegação inferior
-- `use-scale.ts` — Hook Web Serial API (9600 8N1, Baxtran XTA, parser regex `ST,GS:`)
+- `Layout.tsx` — Header com estado da balança FFN Baxtran + navegação inferior (4 separadores)
+- `use-scale.ts` — Hook Web Serial API (9600 8N1, parser regex `ST,GS:`)
 - `use-qr-scanner.ts` — Hook jsQR para scanner de câmara
 - `use-beep.ts` — Feedback sonoro (sucesso, erro, aviso)
 
-## Protocolo Baxtran XTA
+## Protocolo FFN Baxtran
 
 - Baud: 9600 | Data: 8 | Parity: None | Stop: 1 | Modo: StC
 - Formato: `ST,GS: X.XXXXkg\r\n`
 - Overload: `----` | Underload: `lo -` | Bateria baixa: `bA lo`
 - DB9 pin 2(RXD)↔3(TXD), pin 5(GND)
+- `scaleId` registado: `FFN-BAXTRAN-01` (balança) ou `MANUAL-MANUAL` (entrada manual)
 
-## Redundâncias de Pesagem
+## Modos de Pesagem
 
-A página de pesagem tem 3 modos seleccionáveis por separadores:
+A página de pesagem tem 2 modos seleccionáveis por separadores:
 
 | Modo | Descrição |
 |------|-----------|
-| **Balança** | Leitura directa via Web Serial API (Baxtran XTA) |
+| **Balança** | Leitura directa via Web Serial API (FFN Baxtran) |
 | **Manual** | Campo numérico para introdução directa em gramas |
-| **IA / Foto** | Tirar foto ao visor → GPT-4o Vision lê o valor |
 
-O botão "REGISTAR" usa a fonte activa e o `scaleId` regista a origem (`BAXTRAN-XTA-01`, `MANUAL-MANUAL`, `MANUAL-IA`). O histórico do dia mostra a origem de cada pesagem com cor e ícone.
+O botão "REGISTAR" usa a fonte activa. O histórico do dia mostra a origem de cada pesagem com cor e ícone.
 
-### Endpoint IA
-`POST /api/scale/read-photo` — aceita `imageBase64` + `mimeType`, devolve `{grams: number}` ou `{grams: null, error: string}`. Usa GPT-4o Vision via Replit AI Integrations (sem chave API própria necessária).
+## Módulo Entradas/Saídas
+
+- Cada trabalhador faz uma única entrada/saída por dia (registo idempotente).
+- Pesagens só são aceites se houver entrada activa (sem saída) nesse dia — caso contrário API devolve 403.
+- Botões "Entrada — Todos" e "Saída — Todos" para arranque e fim de dia em massa.
+- Horas trabalhadas calculadas como `(checkOutAt − checkInAt)` em horas decimais.
 
 ## Anti-error UX
 
-- Peso válido: 50g–5100g
-- Confirmação para re-pesagem em menos de 15s
-- Debounce de 1.5s no botão de registo
+- Peso válido: **50 g – 10 000 g**
+- Bloqueio de pesagem se trabalhador sem entrada para hoje (com link directo para Entradas/Saídas)
+- Confirmação para re-pesagem em menos de 15 s
+- Debounce de 1.5 s no botão de registo
 - Checklist diário obrigatório ao lançar a app
 
 ## Workflows
