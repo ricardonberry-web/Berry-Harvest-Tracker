@@ -153,6 +153,30 @@ export function ScaleProvider({ children }: { children: ReactNode }) {
   const portRef = useRef<any>(null);
   const readerRef = useRef<any>(null);
   const keepReadingRef = useRef(true);
+  const lastParseAtRef = useRef<number>(0);
+
+  // Watchdog: when no new valid weight has arrived for >2s while connected,
+  // reset display to 0 g. Handles scales that auto-blank at zero or that
+  // emit a frame variant we don't recognise yet.
+  useEffect(() => {
+    if (status !== "CONNECTED") return;
+    const id = setInterval(() => {
+      const silentFor = Date.now() - lastParseAtRef.current;
+      if (silentFor > 2000) {
+        setReading(prev => {
+          if (prev && prev.weightGrams === 0 && prev.status === "STABLE") return prev;
+          return {
+            weightGrams: 0,
+            weightKg: 0,
+            status: "STABLE",
+            rawLine: prev?.rawLine ?? "",
+            timestamp: Date.now(),
+          };
+        });
+      }
+    }, 500);
+    return () => clearInterval(id);
+  }, [status]);
 
   const readLoop = useCallback(async (port: any) => {
     // @ts-ignore
@@ -180,7 +204,10 @@ export function ScaleProvider({ children }: { children: ReactNode }) {
           console.log("[Scale] line:", JSON.stringify(raw));
           setLastRaw(raw);
           const parsed = parseLine(raw);
-          if (parsed) setReading(parsed);
+          if (parsed) {
+            lastParseAtRef.current = Date.now();
+            setReading(parsed);
+          }
         }
         buffer = parts[parts.length - 1] ?? "";
 
@@ -190,7 +217,10 @@ export function ScaleProvider({ children }: { children: ReactNode }) {
           console.log("[Scale] flushing buffer:", JSON.stringify(buffer));
           setLastRaw(buffer);
           const parsed = parseLine(buffer);
-          if (parsed) setReading(parsed);
+          if (parsed) {
+            lastParseAtRef.current = Date.now();
+            setReading(parsed);
+          }
           buffer = "";
         }
       }
@@ -217,6 +247,7 @@ export function ScaleProvider({ children }: { children: ReactNode }) {
 
       portRef.current = port;
       keepReadingRef.current = true;
+      lastParseAtRef.current = Date.now();
       setStatus("CONNECTED");
 
       readLoop(port);

@@ -166,7 +166,13 @@ export default function WeighingPage() {
       lastRecordTimeRef.current = Date.now();
       await refetchRecords();
 
-      if (weightMode === "manual") setManualGrams("");
+      // Reset workflow for the next worker / next box
+      setManualGrams("");
+      setActiveWorkerId(null);
+      toast({
+        title: "Caixa registada",
+        description: `${weight.grams} g — pronto para o próximo trabalhador.`,
+      });
     } catch (err: unknown) {
       beep("error");
       const e = err as { response?: { status?: number; data?: { error?: string } } };
