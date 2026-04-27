@@ -198,6 +198,12 @@ export const CheckInAllBody = zod.object({
     .string()
     .optional()
     .describe("ISO date YYYY-MM-DD (defaults to today)"),
+  workerIds: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      "Restrict the bulk action to these worker IDs (defaults to all active workers)",
+    ),
 });
 
 export const CheckInAllResponseItem = zod.object({
@@ -223,6 +229,12 @@ export const CheckOutAllBody = zod.object({
     .string()
     .optional()
     .describe("ISO date YYYY-MM-DD (defaults to today)"),
+  workerIds: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      "Restrict the bulk action to these worker IDs (defaults to all active workers)",
+    ),
 });
 
 export const CheckOutAllResponseItem = zod.object({
@@ -260,6 +272,18 @@ export const GetDailyReportResponse = zod.object({
       totalKg: zod.number(),
       mediaGrPorCaixa: zod.number(),
       caixasPorHora: zod.number(),
+      hoursWorked: zod
+        .number()
+        .nullable()
+        .describe(
+          "Hours from check-in to check-out (or now, if still working). Null if no attendance record.",
+        ),
+      kgPorHora: zod
+        .number()
+        .nullable()
+        .describe(
+          "totalKg \/ hoursWorked. Null if hoursWorked is null or zero.",
+        ),
       primeiroRegisto: zod.string().nullable(),
       ultimoRegisto: zod.string().nullable(),
       rankKg: zod.number(),

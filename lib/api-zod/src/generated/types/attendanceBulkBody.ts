@@ -9,4 +9,6 @@
 export interface AttendanceBulkBody {
   /** ISO date YYYY-MM-DD (defaults to today) */
   date?: string;
+  /** Restrict the bulk action to these worker IDs (defaults to all active workers) */
+  workerIds?: string[];
 }

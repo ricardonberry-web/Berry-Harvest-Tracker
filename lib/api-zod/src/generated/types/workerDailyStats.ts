@@ -13,6 +13,16 @@ export interface WorkerDailyStats {
   totalKg: number;
   mediaGrPorCaixa: number;
   caixasPorHora: number;
+  /**
+   * Hours from check-in to check-out (or now, if still working). Null if no attendance record.
+   * @nullable
+   */
+  hoursWorked: number | null;
+  /**
+   * totalKg / hoursWorked. Null if hoursWorked is null or zero.
+   * @nullable
+   */
+  kgPorHora: number | null;
   /** @nullable */
   primeiroRegisto: string | null;
   /** @nullable */

@@ -2,13 +2,11 @@ import { useMemo, useState } from "react";
 import { Layout } from "@/components/Layout";
 import {
   useListAttendance,
-  useCheckInWorker,
-  useCheckOutWorker,
   useCheckInAll,
   useCheckOutAll,
 } from "@workspace/api-client-react";
 import {
-  LogIn, LogOut, Users, Clock, CheckCircle2, Circle, Hourglass, RefreshCw,
+  LogIn, LogOut, Users, Clock, CheckCircle2, Circle, Hourglass, RefreshCw, CheckSquare, Square,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -29,14 +27,13 @@ function fmtHours(h: number | null) {
 export default function AttendancePage() {
   const { toast } = useToast();
   const beep = useBeep();
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState<"in" | "out" | null>(null);
 
   const { data: entries = [], refetch, isFetching } = useListAttendance(undefined, {
     query: { refetchInterval: 30_000 },
   });
 
-  const checkIn = useCheckInWorker();
-  const checkOut = useCheckOutWorker();
   const checkInAll = useCheckInAll();
   const checkOutAll = useCheckOutAll();
 
@@ -50,63 +47,60 @@ export default function AttendancePage() {
 
   const today = format(new Date(), "EEEE, dd MMM yyyy");
 
-  const doCheckIn = async (workerId: string) => {
-    setPendingId(workerId);
+  const toggle = (workerId: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(workerId)) next.delete(workerId);
+      else next.add(workerId);
+      return next;
+    });
+  };
+
+  const allSelected = entries.length > 0 && selected.size === entries.length;
+  const toggleAll = () => {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(entries.map(e => e.workerId)));
+  };
+
+  const doCheckInSelected = async () => {
+    if (selected.size === 0) return;
+    if (!window.confirm(`Registar ENTRADA de ${selected.size} trabalhador(es) seleccionado(s)?`)) return;
+    setBulkBusy("in");
     try {
-      await checkIn.mutateAsync({ data: { workerId } });
+      await checkInAll.mutateAsync({ data: { workerIds: Array.from(selected) } });
       beep("success");
       await refetch();
+      toast({ title: "Entradas registadas", description: `${selected.size} trabalhador(es).` });
+      setSelected(new Set());
     } catch {
       beep("error");
-      toast({ title: "Erro ao registar entrada", variant: "destructive" });
+      toast({ title: "Erro ao registar entradas", variant: "destructive" });
     } finally {
-      setPendingId(null);
+      setBulkBusy(null);
     }
   };
 
-  const doCheckOut = async (workerId: string) => {
-    setPendingId(workerId);
+  const doCheckOutSelected = async () => {
+    if (selected.size === 0) return;
+    if (!window.confirm(`Registar SAÍDA de ${selected.size} trabalhador(es) seleccionado(s)?`)) return;
+    setBulkBusy("out");
     try {
-      await checkOut.mutateAsync({ data: { workerId } });
+      await checkOutAll.mutateAsync({ data: { workerIds: Array.from(selected) } });
       beep("success");
       await refetch();
+      toast({ title: "Saídas registadas", description: `${selected.size} trabalhador(es).` });
+      setSelected(new Set());
     } catch {
       beep("error");
-      toast({ title: "Erro ao registar saída", variant: "destructive" });
+      toast({ title: "Erro ao registar saídas", variant: "destructive" });
     } finally {
-      setPendingId(null);
-    }
-  };
-
-  const doCheckInAll = async () => {
-    if (!window.confirm("Registar entrada de TODOS os trabalhadores activos?")) return;
-    try {
-      await checkInAll.mutateAsync({ data: {} });
-      beep("success");
-      await refetch();
-      toast({ title: "Entradas registadas", description: "Todos os trabalhadores activos deram entrada." });
-    } catch {
-      beep("error");
-      toast({ title: "Erro", variant: "destructive" });
-    }
-  };
-
-  const doCheckOutAll = async () => {
-    if (!window.confirm("Registar saída de TODOS os trabalhadores ainda no terreno?")) return;
-    try {
-      await checkOutAll.mutateAsync({ data: {} });
-      beep("success");
-      await refetch();
-      toast({ title: "Saídas registadas", description: "Todos deram saída." });
-    } catch {
-      beep("error");
-      toast({ title: "Erro", variant: "destructive" });
+      setBulkBusy(null);
     }
   };
 
   return (
     <Layout>
-      <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
+      <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6 pb-32">
         {/* Header */}
         <div className="bg-card rounded-2xl shadow-sm border border-border p-6">
           <div className="flex items-center justify-between mb-4">
@@ -142,22 +136,20 @@ export default function AttendancePage() {
           </div>
         </div>
 
-        {/* Bulk actions */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* Selection toolbar */}
+        <div className="bg-card rounded-2xl shadow-sm border border-border p-3 flex items-center justify-between sticky top-2 z-10">
           <button
-            onClick={doCheckInAll}
-            disabled={checkInAll.isPending}
-            className="flex items-center justify-center gap-2 py-4 bg-success text-white font-bold rounded-2xl shadow-lg shadow-success/20 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50"
+            onClick={toggleAll}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-bold text-foreground hover:bg-muted/50 rounded-lg transition-colors"
           >
-            <Users className="w-5 h-5" /> Entrada — Todos
+            {allSelected
+              ? <CheckSquare className="w-5 h-5 text-primary" />
+              : <Square className="w-5 h-5 text-muted-foreground" />}
+            {allSelected ? "Desmarcar todos" : "Seleccionar todos"}
           </button>
-          <button
-            onClick={doCheckOutAll}
-            disabled={checkOutAll.isPending}
-            className="flex items-center justify-center gap-2 py-4 bg-foreground text-background font-bold rounded-2xl shadow-lg hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50"
-          >
-            <Users className="w-5 h-5" /> Saída — Todos
-          </button>
+          <span className="text-sm font-bold text-muted-foreground">
+            {selected.size} de {entries.length} seleccionado{selected.size === 1 ? "" : "s"}
+          </span>
         </div>
 
         {/* Worker list */}
@@ -172,13 +164,25 @@ export default function AttendancePage() {
               {entries.map((e) => {
                 const isIn = !!e.checkInAt && !e.checkOutAt;
                 const isDone = !!e.checkInAt && !!e.checkOutAt;
-                const isWaiting = !e.checkInAt;
-                const busy = pendingId === e.workerId;
+                const isChecked = selected.has(e.workerId);
 
                 return (
-                  <li key={e.workerId} className="p-4 flex items-center gap-3">
+                  <li
+                    key={e.workerId}
+                    className={`p-4 flex items-center gap-3 cursor-pointer transition-colors ${
+                      isChecked ? "bg-primary/5" : "hover:bg-muted/30"
+                    }`}
+                    onClick={() => toggle(e.workerId)}
+                  >
+                    {/* Checkbox */}
+                    <div className="shrink-0">
+                      {isChecked
+                        ? <CheckSquare className="w-6 h-6 text-primary" />
+                        : <Square className="w-6 h-6 text-muted-foreground" />}
+                    </div>
+
                     {/* Status dot */}
-                    <div className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                    <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center ${
                       isIn ? "bg-success/15 text-success" :
                       isDone ? "bg-muted text-muted-foreground" :
                       "bg-destructive/10 text-destructive"
@@ -192,7 +196,7 @@ export default function AttendancePage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-foreground truncate">{e.workerName}</p>
                       <p className="text-xs text-muted-foreground font-mono">{e.workerId}</p>
-                      <div className="flex gap-3 mt-1 text-[11px] text-muted-foreground">
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[11px] text-muted-foreground">
                         <span>Entrada: <strong className="text-foreground">{fmtTime(e.checkInAt)}</strong></span>
                         <span>Saída: <strong className="text-foreground">{fmtTime(e.checkOutAt)}</strong></span>
                         {e.hoursWorked !== null && (
@@ -200,33 +204,39 @@ export default function AttendancePage() {
                         )}
                       </div>
                     </div>
-
-                    {/* Actions */}
-                    <div className="shrink-0 flex flex-col gap-1.5">
-                      {(isWaiting || isDone) && (
-                        <button
-                          onClick={() => doCheckIn(e.workerId)}
-                          disabled={busy}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-success text-white rounded-lg text-xs font-bold hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
-                        >
-                          <LogIn className="w-3.5 h-3.5" /> Entrada
-                        </button>
-                      )}
-                      {isIn && (
-                        <button
-                          onClick={() => doCheckOut(e.workerId)}
-                          disabled={busy}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-foreground text-background rounded-lg text-xs font-bold hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
-                        >
-                          <LogOut className="w-3.5 h-3.5" /> Saída
-                        </button>
-                      )}
-                    </div>
                   </li>
                 );
               })}
             </ul>
           )}
+        </div>
+      </div>
+
+      {/* Sticky action bar */}
+      <div className="fixed bottom-20 left-0 right-0 z-30 px-4 pointer-events-none">
+        <div className={`max-w-3xl mx-auto rounded-2xl border-2 shadow-2xl backdrop-blur-xl transition-all ${
+          selected.size > 0
+            ? "pointer-events-auto bg-card/95 border-primary opacity-100 translate-y-0"
+            : "pointer-events-none bg-card/60 border-border opacity-70 translate-y-2"
+        }`}>
+          <div className="p-3 grid grid-cols-2 gap-3">
+            <button
+              onClick={doCheckInSelected}
+              disabled={selected.size === 0 || bulkBusy !== null}
+              className="flex items-center justify-center gap-2 py-4 bg-success text-white font-bold rounded-xl shadow-lg shadow-success/20 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <LogIn className="w-5 h-5" />
+              {bulkBusy === "in" ? "A registar…" : `Entrada (${selected.size})`}
+            </button>
+            <button
+              onClick={doCheckOutSelected}
+              disabled={selected.size === 0 || bulkBusy !== null}
+              className="flex items-center justify-center gap-2 py-4 bg-foreground text-background font-bold rounded-xl shadow-lg hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <LogOut className="w-5 h-5" />
+              {bulkBusy === "out" ? "A registar…" : `Saída (${selected.size})`}
+            </button>
+          </div>
         </div>
       </div>
     </Layout>

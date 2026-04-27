@@ -60,6 +60,16 @@ export interface WorkerDailyStats {
   totalKg: number;
   mediaGrPorCaixa: number;
   caixasPorHora: number;
+  /**
+   * Hours from check-in to check-out (or now, if still working). Null if no attendance record.
+   * @nullable
+   */
+  hoursWorked: number | null;
+  /**
+   * totalKg / hoursWorked. Null if hoursWorked is null or zero.
+   * @nullable
+   */
+  kgPorHora: number | null;
   /** @nullable */
   primeiroRegisto: string | null;
   /** @nullable */
@@ -92,6 +102,8 @@ export interface AttendanceMutationBody {
 export interface AttendanceBulkBody {
   /** ISO date YYYY-MM-DD (defaults to today) */
   date?: string;
+  /** Restrict the bulk action to these worker IDs (defaults to all active workers) */
+  workerIds?: string[];
 }
 
 export interface DailyReport {

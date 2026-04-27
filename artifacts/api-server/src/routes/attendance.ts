@@ -166,51 +166,65 @@ router.post("/attendance/check-out", async (req, res): Promise<void> => {
   );
 });
 
+function parseWorkerIds(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  const ids = raw.filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+  return ids.length > 0 ? ids : null;
+}
+
 router.post("/attendance/check-in-all", async (req, res): Promise<void> => {
   const date = normaliseDate(req.body?.date);
-  const activeWorkers = await db
-    .select()
-    .from(workersTable)
-    .where(eq(workersTable.active, true));
+  const explicitIds = parseWorkerIds(req.body?.workerIds);
 
-  if (activeWorkers.length === 0) {
-    res.json([]);
+  const targetWorkers = explicitIds
+    ? await db.select().from(workersTable).where(inArray(workersTable.id, explicitIds))
+    : await db.select().from(workersTable).where(eq(workersTable.active, true));
+
+  if (targetWorkers.length === 0) {
+    res.json(await loadEntriesForDate(date));
     return;
   }
 
+  const targetIds = targetWorkers.map((w) => w.id);
   const existing = await db
     .select()
     .from(attendanceTable)
-    .where(
-      and(
-        eq(attendanceTable.date, date),
-        inArray(
-          attendanceTable.workerId,
-          activeWorkers.map((w) => w.id),
-        ),
-      ),
-    );
-  const existingIds = new Set(existing.map((e) => e.workerId));
+    .where(and(eq(attendanceTable.date, date), inArray(attendanceTable.workerId, targetIds)));
+  const existingByWorker = new Map(existing.map((e) => [e.workerId, e]));
 
-  const toInsert = activeWorkers
-    .filter((w) => !existingIds.has(w.id))
+  // Insert new check-ins for workers without any record
+  const toInsert = targetWorkers
+    .filter((w) => !existingByWorker.has(w.id))
     .map((w) => ({ workerId: w.id, date, checkInAt: new Date(), checkOutAt: null }));
-
   if (toInsert.length > 0) {
     await db.insert(attendanceTable).values(toInsert);
   }
 
-  // Re-open any that had checked out earlier in the day? No — only fill missing.
+  // For workers who had already checked out today, re-open with a fresh check-in
+  const toReopen = existing.filter((e) => e.checkOutAt !== null).map((e) => e.id);
+  if (toReopen.length > 0) {
+    await db
+      .update(attendanceTable)
+      .set({ checkInAt: new Date(), checkOutAt: null })
+      .where(inArray(attendanceTable.id, toReopen));
+  }
+
   res.json(await loadEntriesForDate(date));
 });
 
 router.post("/attendance/check-out-all", async (req, res): Promise<void> => {
   const date = normaliseDate(req.body?.date);
+  const explicitIds = parseWorkerIds(req.body?.workerIds);
+
+  const conditions = [eq(attendanceTable.date, date), isNull(attendanceTable.checkOutAt)];
+  if (explicitIds) {
+    conditions.push(inArray(attendanceTable.workerId, explicitIds));
+  }
 
   await db
     .update(attendanceTable)
     .set({ checkOutAt: new Date() })
-    .where(and(eq(attendanceTable.date, date), isNull(attendanceTable.checkOutAt)));
+    .where(and(...conditions));
 
   res.json(await loadEntriesForDate(date));
 });

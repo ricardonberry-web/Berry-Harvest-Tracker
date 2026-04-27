@@ -526,6 +526,12 @@ components:
           type: number
         caixasPorHora:
           type: number
+        hoursWorked:
+          type: ["number", "null"]
+          description: Hours from check-in to check-out (or now, if still working). Null if no attendance record.
+        kgPorHora:
+          type: ["number", "null"]
+          description: totalKg / hoursWorked. Null if hoursWorked is null or zero.
         primeiroRegisto:
           type: ["string", "null"]
         ultimoRegisto:
@@ -539,6 +545,8 @@ components:
         - totalKg
         - mediaGrPorCaixa
         - caixasPorHora
+        - hoursWorked
+        - kgPorHora
         - primeiroRegisto
         - ultimoRegisto
         - rankKg
@@ -587,6 +595,11 @@ components:
         date:
           type: string
           description: ISO date YYYY-MM-DD (defaults to today)
+        workerIds:
+          type: array
+          description: Restrict the bulk action to these worker IDs (defaults to all active workers)
+          items:
+            type: string
 
     DailyReport:
       type: object

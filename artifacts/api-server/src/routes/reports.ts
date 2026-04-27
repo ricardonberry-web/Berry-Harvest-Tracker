@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, gte, lt, sql } from "drizzle-orm";
-import { db, weighRecordsTable, workersTable } from "@workspace/db";
+import { db, weighRecordsTable, workersTable, attendanceTable } from "@workspace/db";
 import {
   GetDailyReportQueryParams,
   ExportRecordsQueryParams,
@@ -42,6 +42,13 @@ router.get("/reports/daily", async (req, res): Promise<void> => {
     .groupBy(weighRecordsTable.workerId, workersTable.name)
     .orderBy(sql`sum(${weighRecordsTable.weightGrams}) desc`);
 
+  // Load attendance for the day so we can compute hoursWorked / kgPorHora from real check-in/out
+  const attendance = await db
+    .select()
+    .from(attendanceTable)
+    .where(eq(attendanceTable.date, dateStr));
+  const attendanceByWorker = new Map(attendance.map((a) => [a.workerId, a]));
+
   const totalKgAll = records.reduce((acc, r) => acc + (r.totalGrams || 0), 0) / 1000;
   const totalRecordsAll = records.reduce((acc, r) => acc + (r.totalCaixas || 0), 0);
 
@@ -49,10 +56,28 @@ router.get("/reports/daily", async (req, res): Promise<void> => {
     const totalKg = (r.totalGrams || 0) / 1000;
     const first = r.primeiroRegisto ? new Date(r.primeiroRegisto) : null;
     const last = r.ultimoRegisto ? new Date(r.ultimoRegisto) : null;
+
+    // Prefer real attendance hours; fall back to first/last weighing as legacy estimate
+    const att = attendanceByWorker.get(r.workerId);
+    let hoursWorked: number | null = null;
+    if (att?.checkInAt) {
+      const start = new Date(att.checkInAt).getTime();
+      const end = att.checkOutAt ? new Date(att.checkOutAt).getTime() : Date.now();
+      const h = (end - start) / 3_600_000;
+      if (h > 0) hoursWorked = Math.round(h * 100) / 100;
+    }
+
+    const kgPorHora =
+      hoursWorked !== null && hoursWorked > 0
+        ? Math.round((totalKg / hoursWorked) * 100) / 100
+        : null;
+
     let caixasPorHora = 0;
-    if (first && last && last.getTime() - first.getTime() > 0) {
-      const hoursWorked = (last.getTime() - first.getTime()) / 3600000;
-      caixasPorHora = hoursWorked > 0 ? Math.round((r.totalCaixas / hoursWorked) * 100) / 100 : 0;
+    if (hoursWorked !== null && hoursWorked > 0) {
+      caixasPorHora = Math.round((r.totalCaixas / hoursWorked) * 100) / 100;
+    } else if (first && last && last.getTime() - first.getTime() > 0) {
+      const h = (last.getTime() - first.getTime()) / 3_600_000;
+      caixasPorHora = h > 0 ? Math.round((r.totalCaixas / h) * 100) / 100 : 0;
     }
 
     return {
@@ -62,6 +87,8 @@ router.get("/reports/daily", async (req, res): Promise<void> => {
       totalKg: Math.round(totalKg * 100) / 100,
       mediaGrPorCaixa: Math.round(r.mediaGrPorCaixa || 0),
       caixasPorHora,
+      hoursWorked,
+      kgPorHora,
       primeiroRegisto: r.primeiroRegisto ?? null,
       ultimoRegisto: r.ultimoRegisto ?? null,
       rankKg: idx + 1,

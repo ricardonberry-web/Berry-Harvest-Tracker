@@ -53,16 +53,16 @@ PWA para Android (Chrome) que regista pesagens de caixas de mirtilo em campo. Co
 | GET | `/api/attendance?date=` | Lista entradas/saídas de um dia (default: hoje) |
 | POST | `/api/attendance/check-in` | Entrada de um trabalhador |
 | POST | `/api/attendance/check-out` | Saída de um trabalhador |
-| POST | `/api/attendance/check-in-all` | Entrada de TODOS os activos |
-| POST | `/api/attendance/check-out-all` | Saída de TODOS os que estão no terreno |
+| POST | `/api/attendance/check-in-all` | Entrada em massa (body: `{workerIds?: string[]}` — opcional; se omitido aplica a todos os activos; reabre quem já tinha saído) |
+| POST | `/api/attendance/check-out-all` | Saída em massa (body: `{workerIds?: string[]}` — opcional; se omitido aplica a todos os que ainda estão no terreno) |
 | GET | `/api/reports/daily?date=YYYY-MM-DD` | Ranking diário por kg |
 | GET | `/api/reports/export?date=YYYY-MM-DD` | Exporta CSV |
 
 ## Frontend — Páginas
 
 - **`/`** — Pesagem: identificação do trabalhador (QR ou manual), modos Balança e Manual, botão de registo, histórico do dia. Bloqueia se o trabalhador não tem entrada nesse dia.
-- **`/attendance`** — Entradas/Saídas diárias: lista de trabalhadores, botões individuais e bulk "Entrada/Saída — Todos", contagem de horas trabalhadas.
-- **`/ranking`** — Ranking diário: tabela por trabalhador (kg, caixas, média, caixas/hora); exportação CSV
+- **`/attendance`** — Entradas/Saídas diárias: caixa de selecção por trabalhador + barra fixa com 2 botões "Entrada (N)" e "Saída (N)" que aplicam a acção apenas aos seleccionados. Mostra hora de entrada, saída e total trabalhado.
+- **`/ranking`** — Ranking diário: filtro por data, ordenação por kg/kg-h/caixas/horas, opção "só com horas registadas", colunas Horas e **Kg/h** (calculados a partir de check-in/check-out reais), kg/h da equipa, exportação CSV.
 - **`/workers`** — Gestão de trabalhadores: listagem, pesquisa, criação, badges QR
 
 ## Componentes-chave
