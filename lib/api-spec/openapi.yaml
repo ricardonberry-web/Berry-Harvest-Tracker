@@ -350,6 +350,79 @@ paths:
                 items:
                   $ref: "#/components/schemas/AttendanceEntry"
 
+  /workers/{id}/timesheet:
+    get:
+      operationId: getWorkerTimesheet
+      tags: [workers]
+      summary: Get attendance days for a worker in a date range, with hours and pay
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+          description: ISO date YYYY-MM-DD (default 30 days ago)
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+          description: ISO date YYYY-MM-DD (default today)
+        - name: hourlyRate
+          in: query
+          required: false
+          schema:
+            type: number
+          description: Optional hourly rate for pay calculation
+      responses:
+        "200":
+          description: Worker timesheet for the period
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkerTimesheet"
+        "404":
+          description: Worker not found
+
+  /workers/{id}/timesheet/export:
+    get:
+      operationId: exportWorkerTimesheet
+      tags: [workers]
+      summary: Export a worker's timesheet as CSV
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: hourlyRate
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: CSV file of the worker's timesheet
+          content:
+            text/csv:
+              schema:
+                type: string
+
   /reports/daily:
     get:
       operationId: getDailyReport
@@ -550,6 +623,62 @@ components:
         - primeiroRegisto
         - ultimoRegisto
         - rankKg
+
+    WorkerTimesheetDay:
+      type: object
+      properties:
+        date:
+          type: string
+        checkInAt:
+          type: ["string", "null"]
+        checkOutAt:
+          type: ["string", "null"]
+        hoursWorked:
+          type: ["number", "null"]
+        pay:
+          type: ["number", "null"]
+          description: hoursWorked * hourlyRate (null if either is missing)
+      required:
+        - date
+        - checkInAt
+        - checkOutAt
+        - hoursWorked
+        - pay
+
+    WorkerTimesheet:
+      type: object
+      properties:
+        workerId:
+          type: string
+        workerName:
+          type: string
+        from:
+          type: string
+        to:
+          type: string
+        hourlyRate:
+          type: ["number", "null"]
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkerTimesheetDay"
+        totalDays:
+          type: integer
+          description: Number of days with at least a check-in
+        totalHours:
+          type: number
+        totalPay:
+          type: ["number", "null"]
+      required:
+        - workerId
+        - workerName
+        - from
+        - to
+        - hourlyRate
+        - days
+        - totalDays
+        - totalHours
+        - totalPay
 
     AttendanceEntry:
       type: object

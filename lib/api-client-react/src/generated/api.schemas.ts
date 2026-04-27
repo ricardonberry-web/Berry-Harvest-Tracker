@@ -77,6 +77,36 @@ export interface WorkerDailyStats {
   rankKg: number;
 }
 
+export interface WorkerTimesheetDay {
+  date: string;
+  /** @nullable */
+  checkInAt: string | null;
+  /** @nullable */
+  checkOutAt: string | null;
+  /** @nullable */
+  hoursWorked: number | null;
+  /**
+   * hoursWorked * hourlyRate (null if either is missing)
+   * @nullable
+   */
+  pay: number | null;
+}
+
+export interface WorkerTimesheet {
+  workerId: string;
+  workerName: string;
+  from: string;
+  to: string;
+  /** @nullable */
+  hourlyRate: number | null;
+  days: WorkerTimesheetDay[];
+  /** Number of days with at least a check-in */
+  totalDays: number;
+  totalHours: number;
+  /** @nullable */
+  totalPay: number | null;
+}
+
 export interface AttendanceEntry {
   workerId: string;
   workerName: string;
@@ -127,6 +157,27 @@ export type ListAttendanceParams = {
    * ISO date YYYY-MM-DD (defaults to today)
    */
   date?: string;
+};
+
+export type GetWorkerTimesheetParams = {
+  /**
+   * ISO date YYYY-MM-DD (default 30 days ago)
+   */
+  from?: string;
+  /**
+   * ISO date YYYY-MM-DD (default today)
+   */
+  to?: string;
+  /**
+   * Optional hourly rate for pay calculation
+   */
+  hourlyRate?: number;
+};
+
+export type ExportWorkerTimesheetParams = {
+  from?: string;
+  to?: string;
+  hourlyRate?: number;
 };
 
 export type GetDailyReportParams = {

@@ -25,13 +25,16 @@ import type {
   DailyReport,
   ErrorResponse,
   ExportRecordsParams,
+  ExportWorkerTimesheetParams,
   GetDailyReportParams,
+  GetWorkerTimesheetParams,
   HealthStatus,
   ListAttendanceParams,
   ListWeighRecordsParams,
   UpdateWorkerBody,
   WeighRecord,
   Worker,
+  WorkerTimesheet,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -1237,6 +1240,233 @@ export const useCheckOutAll = <
 > => {
   return useMutation(getCheckOutAllMutationOptions(options));
 };
+
+/**
+ * @summary Get attendance days for a worker in a date range, with hours and pay
+ */
+export const getGetWorkerTimesheetUrl = (
+  id: string,
+  params?: GetWorkerTimesheetParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/workers/${id}/timesheet?${stringifiedParams}`
+    : `/api/workers/${id}/timesheet`;
+};
+
+export const getWorkerTimesheet = async (
+  id: string,
+  params?: GetWorkerTimesheetParams,
+  options?: RequestInit,
+): Promise<WorkerTimesheet> => {
+  return customFetch<WorkerTimesheet>(getGetWorkerTimesheetUrl(id, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetWorkerTimesheetQueryKey = (
+  id: string,
+  params?: GetWorkerTimesheetParams,
+) => {
+  return [`/api/workers/${id}/timesheet`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetWorkerTimesheetQueryOptions = <
+  TData = Awaited<ReturnType<typeof getWorkerTimesheet>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  params?: GetWorkerTimesheetParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getWorkerTimesheet>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetWorkerTimesheetQueryKey(id, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getWorkerTimesheet>>
+  > = ({ signal }) =>
+    getWorkerTimesheet(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getWorkerTimesheet>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetWorkerTimesheetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getWorkerTimesheet>>
+>;
+export type GetWorkerTimesheetQueryError = ErrorType<void>;
+
+/**
+ * @summary Get attendance days for a worker in a date range, with hours and pay
+ */
+
+export function useGetWorkerTimesheet<
+  TData = Awaited<ReturnType<typeof getWorkerTimesheet>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  params?: GetWorkerTimesheetParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getWorkerTimesheet>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWorkerTimesheetQueryOptions(id, params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Export a worker's timesheet as CSV
+ */
+export const getExportWorkerTimesheetUrl = (
+  id: string,
+  params?: ExportWorkerTimesheetParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/workers/${id}/timesheet/export?${stringifiedParams}`
+    : `/api/workers/${id}/timesheet/export`;
+};
+
+export const exportWorkerTimesheet = async (
+  id: string,
+  params?: ExportWorkerTimesheetParams,
+  options?: RequestInit,
+): Promise<string> => {
+  return customFetch<string>(getExportWorkerTimesheetUrl(id, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getExportWorkerTimesheetQueryKey = (
+  id: string,
+  params?: ExportWorkerTimesheetParams,
+) => {
+  return [
+    `/api/workers/${id}/timesheet/export`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getExportWorkerTimesheetQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportWorkerTimesheet>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  params?: ExportWorkerTimesheetParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof exportWorkerTimesheet>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getExportWorkerTimesheetQueryKey(id, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof exportWorkerTimesheet>>
+  > = ({ signal }) =>
+    exportWorkerTimesheet(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportWorkerTimesheet>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ExportWorkerTimesheetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportWorkerTimesheet>>
+>;
+export type ExportWorkerTimesheetQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Export a worker's timesheet as CSV
+ */
+
+export function useExportWorkerTimesheet<
+  TData = Awaited<ReturnType<typeof exportWorkerTimesheet>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  params?: ExportWorkerTimesheetParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof exportWorkerTimesheet>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getExportWorkerTimesheetQueryOptions(
+    id,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get daily productivity ranking

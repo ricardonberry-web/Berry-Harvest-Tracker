@@ -253,6 +253,64 @@ export const CheckOutAllResponseItem = zod.object({
 export const CheckOutAllResponse = zod.array(CheckOutAllResponseItem);
 
 /**
+ * @summary Get attendance days for a worker in a date range, with hours and pay
+ */
+export const GetWorkerTimesheetParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetWorkerTimesheetQueryParams = zod.object({
+  from: zod.coerce
+    .string()
+    .optional()
+    .describe("ISO date YYYY-MM-DD (default 30 days ago)"),
+  to: zod.coerce
+    .string()
+    .optional()
+    .describe("ISO date YYYY-MM-DD (default today)"),
+  hourlyRate: zod.coerce
+    .number()
+    .optional()
+    .describe("Optional hourly rate for pay calculation"),
+});
+
+export const GetWorkerTimesheetResponse = zod.object({
+  workerId: zod.string(),
+  workerName: zod.string(),
+  from: zod.string(),
+  to: zod.string(),
+  hourlyRate: zod.number().nullable(),
+  days: zod.array(
+    zod.object({
+      date: zod.string(),
+      checkInAt: zod.string().nullable(),
+      checkOutAt: zod.string().nullable(),
+      hoursWorked: zod.number().nullable(),
+      pay: zod
+        .number()
+        .nullable()
+        .describe("hoursWorked \* hourlyRate (null if either is missing)"),
+    }),
+  ),
+  totalDays: zod.number().describe("Number of days with at least a check-in"),
+  totalHours: zod.number(),
+  totalPay: zod.number().nullable(),
+});
+
+/**
+ * @summary Export a worker's timesheet as CSV
+ */
+export const ExportWorkerTimesheetParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ExportWorkerTimesheetQueryParams = zod.object({
+  from: zod.coerce.string().optional(),
+  to: zod.coerce.string().optional(),
+  hourlyRate: zod.coerce.number().optional(),
+});
+
+/**
  * @summary Get daily productivity ranking
  */
 export const GetDailyReportQueryParams = zod.object({
