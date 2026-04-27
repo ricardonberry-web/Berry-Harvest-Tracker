@@ -25,7 +25,7 @@ const MAX_GRAMS = 10000;
 const SCALE_ID = "FFN-BAXTRAN-01";
 
 export default function WeighingPage() {
-  const { status: scaleStatus, reading } = useScale();
+  const { status: scaleStatus, reading, lastRaw } = useScale();
   const beep = useBeep();
   const { toast } = useToast();
 
@@ -371,6 +371,11 @@ export default function WeighingPage() {
                           {reading ? reading.weightGrams : "0"}
                           <span className="text-3xl text-muted-foreground ml-1">g</span>
                         </div>
+                      </div>
+                    )}
+                    {lastRaw && (
+                      <div className="mt-3 px-3 py-2 bg-muted/40 rounded-md text-[10px] font-mono text-muted-foreground break-all text-left" data-testid="text-scale-raw">
+                        <span className="opacity-60 mr-1">RX:</span>{lastRaw}
                       </div>
                     )}
                   </>

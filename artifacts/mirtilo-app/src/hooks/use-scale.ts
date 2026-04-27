@@ -15,57 +15,131 @@ interface ScaleContextValue {
   status: ScaleStatus;
   reading: WeightReading | null;
   error: string | null;
+  /** Last raw line/frame received (debug aid). */
+  lastRaw: string;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
 }
 
 const ScaleContext = createContext<ScaleContextValue | null>(null);
 
-// Baxtran XTA-style frames examples:
-//   "ST,GS:  +1.2345kg\r\n"  (stable, gross)
-//   "US,GS:  +1.2345kg\r\n"  (unstable, gross)
-//   "ST,NT:  +1.2345kg\r\n"  (stable, net)
-// We accept any 2-char status + 2-char type prefix.
-const PARSER_REGEX = /(ST|US),\s*(GS|NT)\s*:\s*([+-]?)\s*(\d+\.?\d*)\s*kg/i;
-
 const MIN_GRAMS = -200;          // small negatives possible after tare
 const MAX_GRAMS_HARD_LIMIT = 12000; // safety filter for crazy spikes; UI enforces 10000g
 
+/**
+ * Try several known Baxtran continuous-output formats. Returns null if no parse.
+ *
+ * Supported variants:
+ *  - XTA / FFN style:        "ST,GS:  +1.2345kg"  /  "US,GS:  +1.2345kg"  /  "ST,NT:  -0.250 kg"
+ *  - UF series Format 1:     "S  +001.234 kg"     /  "U  +001.234 kg"     /  "OL    kg"
+ *                            (S=stable, U=unstable, O=overload)
+ *  - Toledo continuous:      <STX> SWA SWB SWC W W W W W W T T T T T T <CR>
+ *  - Generic fallback:       any line containing a number followed by "kg" or "g"
+ */
 function parseLine(line: string): WeightReading | null {
-  const trimmed = line.trim();
+  const trimmed = line.replace(/\u0000/g, "").trim();
   if (!trimmed) return null;
+  const now = Date.now();
 
-  // Overload: "----" or "OL"
-  if (trimmed.includes("----") || /\bOL\b/i.test(trimmed)) {
-    return { weightGrams: 0, weightKg: 0, status: "OVERLOAD", rawLine: line, timestamp: Date.now() };
+  // Overload / underload / battery — multiple spellings
+  if (/----/.test(trimmed) || /\b(OL|O-?L|OVER ?LOAD)\b/i.test(trimmed)) {
+    return { weightGrams: 0, weightKg: 0, status: "OVERLOAD", rawLine: line, timestamp: now };
   }
-  // Underload: "LO" with negative
-  if (/\bLO\b/i.test(trimmed) && trimmed.includes("-")) {
-    return { weightGrams: 0, weightKg: 0, status: "UNDERLOAD", rawLine: line, timestamp: Date.now() };
+  if ((/\bLO\b/i.test(trimmed) || /\bUNDER ?LOAD\b/i.test(trimmed)) && trimmed.includes("-")) {
+    return { weightGrams: 0, weightKg: 0, status: "UNDERLOAD", rawLine: line, timestamp: now };
   }
-  // Battery low
-  if (/(ba\s*lo|lo\s*ba)/i.test(trimmed)) {
-    return { weightGrams: 0, weightKg: 0, status: "ERROR", rawLine: line, timestamp: Date.now() };
+  if (/(ba\s*lo|lo\s*ba|low ?bat)/i.test(trimmed)) {
+    return { weightGrams: 0, weightKg: 0, status: "ERROR", rawLine: line, timestamp: now };
   }
 
-  const match = PARSER_REGEX.exec(trimmed);
-  if (!match) return null;
+  // Variant A: "ST,GS: +1.234 kg" / "US,GS:" / "ST,NT:"
+  let m = /(ST|US),\s*(GS|NT)\s*:\s*([+-]?)\s*(\d+\.?\d*)\s*kg/i.exec(trimmed);
+  if (m) {
+    return buildReading({
+      stable: m[1].toUpperCase() === "ST",
+      sign: m[3] === "-" ? -1 : 1,
+      value: parseFloat(m[4]),
+      unit: "kg",
+      raw: line,
+    });
+  }
 
-  const stability = match[1].toUpperCase(); // ST or US
-  const sign = match[3] === "-" ? -1 : 1;
-  const rawKg = parseFloat(match[4]);
-  if (Number.isNaN(rawKg)) return null;
+  // Variant B: UF-6 Format 1 — leading status letter, then number + unit
+  // Examples: "S  +001.234 kg" , "U -000.150 kg" , "S 1.234 kg"
+  m = /^([SUOsuoSt])[A-Za-z]?\s+([+-]?)\s*(\d+\.?\d*)\s*(kg|g)\b/i.exec(trimmed);
+  if (m) {
+    const tag = m[1].toUpperCase();
+    if (tag === "O") {
+      return { weightGrams: 0, weightKg: 0, status: "OVERLOAD", rawLine: line, timestamp: now };
+    }
+    return buildReading({
+      stable: tag === "S",
+      sign: m[2] === "-" ? -1 : 1,
+      value: parseFloat(m[3]),
+      unit: m[4].toLowerCase() as "kg" | "g",
+      raw: line,
+    });
+  }
 
-  const finalKg = rawKg * sign;
-  const finalGrams = Math.round(finalKg * 1000);
+  // Variant C: Toledo continuous frame — "<STX>SWA SWB SWC WWWWWW TTTTTT<CR>"
+  // Look for STX (0x02) and 6-digit weight that follows the 3 status bytes.
+  // After we strip control chars in `trimmed`, all that remains visible is letters+digits.
+  // Match: 3 ASCII chars, then 6 digits (weight), then 6 digits (tare).
+  m = /^([A-Za-z0-9?@])([A-Za-z0-9?@])([A-Za-z0-9?@])(\d{6})(\d{6})$/.exec(trimmed);
+  if (m) {
+    const swa = m[1].charCodeAt(0);
+    // Toledo: SWA bit5 = decimal position; SWB bit0 = stable (1 = unstable for some, 0 for others)
+    const decPos = swa & 0b00000111;     // 0–6
+    const weightInt = parseInt(m[4], 10);
+    const swb = m[2].charCodeAt(0);
+    const isUnstable = (swb & 0b00000001) === 1;
+    const isNeg = (swb & 0b00000010) === 0b00000010;
+    const value = weightInt / Math.pow(10, decPos);
+    return buildReading({
+      stable: !isUnstable,
+      sign: isNeg ? -1 : 1,
+      value,
+      unit: "kg",
+      raw: line,
+    });
+  }
 
-  if (finalGrams < MIN_GRAMS || finalGrams > MAX_GRAMS_HARD_LIMIT) return null;
+  // Variant D — ultra-permissive fallback: first number with optional sign
+  // and optional unit (kg/g). Assume kg if unit absent OR if value < 100 with decimal.
+  m = /([+-]?)\s*(\d{1,5}\.?\d{0,4})\s*(kg|g)?\b/i.exec(trimmed);
+  if (m && m[2]) {
+    const value = parseFloat(m[2]);
+    if (Number.isFinite(value) && value > 0) {
+      // Heuristic for unit: explicit 'g' (not preceded by 'k') => grams. Otherwise kg.
+      const unit: "kg" | "g" = m[3]?.toLowerCase() === "g" ? "g" : "kg";
+      return buildReading({
+        stable: true, // assume stable when unknown
+        sign: m[1] === "-" ? -1 : 1,
+        value,
+        unit,
+        raw: line,
+      });
+    }
+  }
 
+  return null;
+}
+
+function buildReading(opts: {
+  stable: boolean;
+  sign: 1 | -1;
+  value: number;
+  unit: "kg" | "g";
+  raw: string;
+}): WeightReading | null {
+  if (!Number.isFinite(opts.value)) return null;
+  const grams = Math.round((opts.unit === "kg" ? opts.value * 1000 : opts.value) * opts.sign);
+  if (grams < MIN_GRAMS || grams > MAX_GRAMS_HARD_LIMIT) return null;
   return {
-    weightKg: finalKg,
-    weightGrams: finalGrams,
-    status: stability === "ST" ? "STABLE" : "UNSTABLE",
-    rawLine: line,
+    weightGrams: grams,
+    weightKg: grams / 1000,
+    status: opts.stable ? "STABLE" : "UNSTABLE",
+    rawLine: opts.raw,
     timestamp: Date.now(),
   };
 }
@@ -74,6 +148,7 @@ export function ScaleProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<ScaleStatus>("DISCONNECTED");
   const [reading, setReading] = useState<WeightReading | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastRaw, setLastRaw] = useState<string>("");
 
   const portRef = useRef<any>(null);
   const readerRef = useRef<any>(null);
@@ -91,16 +166,32 @@ export function ScaleProvider({ children }: { children: ReactNode }) {
       while (keepReadingRef.current) {
         const { value, done } = await reader.read();
         if (done) break;
-        if (value) {
-          buffer += value;
-          const lines = buffer.split(/\r?\n/);
-          for (let i = 0; i < lines.length - 1; i++) {
-            const parsed = parseLine(lines[i]);
-            if (parsed) setReading(parsed);
-          }
-          buffer = lines[lines.length - 1];
-          // Safety: avoid runaway buffer if no newline is ever sent
-          if (buffer.length > 4096) buffer = buffer.slice(-1024);
+        if (!value) continue;
+
+        buffer += value;
+
+        // Split on any combination of CR, LF, STX (0x02) or ETX (0x03).
+        // Then trim each part. Keep the last partial chunk in the buffer.
+        const parts = buffer.split(/[\r\n\u0002\u0003]+/);
+        for (let i = 0; i < parts.length - 1; i++) {
+          const raw = parts[i];
+          if (!raw) continue;
+          // Always log + expose so user can debug unknown formats
+          console.log("[Scale] line:", JSON.stringify(raw));
+          setLastRaw(raw);
+          const parsed = parseLine(raw);
+          if (parsed) setReading(parsed);
+        }
+        buffer = parts[parts.length - 1] ?? "";
+
+        // Fallback: some formats only send CR or no terminator at all.
+        // If buffer accumulated for >300ms with no terminator, try to parse it as-is.
+        if (buffer.length > 200) {
+          console.log("[Scale] flushing buffer:", JSON.stringify(buffer));
+          setLastRaw(buffer);
+          const parsed = parseLine(buffer);
+          if (parsed) setReading(parsed);
+          buffer = "";
         }
       }
     } catch (err: any) {
@@ -148,6 +239,7 @@ export function ScaleProvider({ children }: { children: ReactNode }) {
     }
     setStatus("DISCONNECTED");
     setReading(null);
+    setLastRaw("");
   }, []);
 
   useEffect(() => {
@@ -158,7 +250,7 @@ export function ScaleProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const value: ScaleContextValue = { status, reading, error, connect, disconnect };
+  const value: ScaleContextValue = { status, reading, error, lastRaw, connect, disconnect };
   return createElement(ScaleContext.Provider, { value }, children);
 }
 
