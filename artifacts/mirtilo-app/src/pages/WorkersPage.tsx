@@ -3,19 +3,25 @@ import { Layout } from "@/components/Layout";
 import {
   useListWorkers,
   useCreateWorker,
+  useUpdateWorker,
+  useDeleteWorker,
   useGetWorkerTimesheet,
 } from "@workspace/api-client-react";
-import { Users, Plus, QrCode, Search, UserCheck, Clock, Download, X, Calendar as CalendarIcon, Euro } from "lucide-react";
+import { Users, Plus, QrCode, Search, UserCheck, Clock, Download, X, Calendar as CalendarIcon, Euro, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { getListWorkersQueryKey } from "@workspace/api-client-react";
 import { format, subDays } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
+
+type WorkerRow = { id: string; name: string; active: boolean };
 
 export default function WorkersPage() {
   const [search, setSearch] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedQR, setSelectedQR] = useState<{id: string, name: string} | null>(null);
   const [selectedTimesheet, setSelectedTimesheet] = useState<{id: string, name: string} | null>(null);
+  const [selectedEdit, setSelectedEdit] = useState<WorkerRow | null>(null);
 
   const { data: workers = [], isLoading } = useListWorkers();
   const filteredWorkers = workers.filter(w =>
@@ -65,15 +71,25 @@ export default function WorkersPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredWorkers.map(worker => (
-              <div key={worker.id} className="bg-card border border-border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow group flex flex-col">
+              <div key={worker.id} className={`bg-card border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow group flex flex-col ${worker.active ? 'border-border' : 'border-border opacity-70'}`}>
                 <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="font-bold text-lg text-foreground">{worker.name}</h3>
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-lg text-foreground truncate" data-testid={`text-worker-name-${worker.id}`}>{worker.name}</h3>
                     <span className="inline-flex mt-1 items-center gap-1 bg-muted px-2 py-1 rounded text-xs font-mono font-medium text-muted-foreground">
                       <UserCheck className="w-3 h-3" /> {worker.id}
                     </span>
+                    {!worker.active && (
+                      <span className="inline-block ml-2 mt-1 text-[10px] font-bold uppercase tracking-wider text-destructive">Inactivo</span>
+                    )}
                   </div>
-                  <div className={`w-3 h-3 rounded-full ${worker.active ? 'bg-success shadow-[0_0_8px_rgba(0,255,0,0.5)]' : 'bg-destructive'}`} />
+                  <button
+                    onClick={() => setSelectedEdit({ id: worker.id, name: worker.name, active: worker.active })}
+                    className="p-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
+                    title="Editar trabalhador"
+                    data-testid={`button-edit-worker-${worker.id}`}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
                 </div>
 
                 <div className="mt-auto pt-4 grid grid-cols-2 gap-2">
