@@ -25,7 +25,7 @@ const MAX_GRAMS = 10000;
 const SCALE_ID = "FFN-BAXTRAN-01";
 
 export default function WeighingPage() {
-  const { status: scaleStatus, reading, lastRaw } = useScale();
+  const { status: scaleStatus, reading, lastRaw, bytesReceived, lastByteAt } = useScale();
   const beep = useBeep();
   const { toast } = useToast();
 
@@ -379,11 +379,12 @@ export default function WeighingPage() {
                         </div>
                       </div>
                     )}
-                    {lastRaw && (
-                      <div className="mt-3 px-3 py-2 bg-muted/40 rounded-md text-[10px] font-mono text-muted-foreground break-all text-left" data-testid="text-scale-raw">
-                        <span className="opacity-60 mr-1">RX:</span>{lastRaw}
-                      </div>
-                    )}
+                    <ScaleDiagnostics
+                      bytesReceived={bytesReceived}
+                      lastByteAt={lastByteAt}
+                      lastRaw={lastRaw}
+                    />
+
                   </>
                 )}
               </div>
@@ -493,5 +494,58 @@ export default function WeighingPage() {
         )}
       </div>
     </Layout>
+  );
+}
+
+function ScaleDiagnostics({
+  bytesReceived,
+  lastByteAt,
+  lastRaw,
+}: {
+  bytesReceived: number;
+  lastByteAt: number;
+  lastRaw: string;
+}) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, []);
+
+  const silentForMs = lastByteAt > 0 ? now - lastByteAt : -1;
+  const dotColour =
+    bytesReceived === 0
+      ? "bg-destructive animate-pulse"
+      : silentForMs > 3000
+        ? "bg-orange-500"
+        : "bg-success animate-pulse";
+
+  return (
+    <div className="mt-4 px-3 py-2.5 bg-muted/40 rounded-md text-left space-y-1.5" data-testid="scale-diagnostics">
+      <div className="flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full ${dotColour}`} />
+          Diagnóstico cabo
+        </span>
+        <span className="font-mono normal-case font-medium" data-testid="text-bytes-counter">
+          {bytesReceived} bytes
+        </span>
+      </div>
+
+      {bytesReceived === 0 ? (
+        <p className="text-[11px] text-destructive font-medium leading-snug">
+          Sem dados a chegar do adaptador. Verifique:
+          <br />• A balança está em modo "stream contínuo"
+          <br />• Baudrate do SH-B30 = 9600, 8N1 (DIP-switches)
+          <br />• Cabo RS-232 entre balança e adaptador (TX/RX)
+          <br />• Tente a outra porta COM se o Windows criou duas
+        </p>
+      ) : (
+        <div className="text-[10px] font-mono text-muted-foreground break-all" data-testid="text-scale-raw">
+          <span className="opacity-60 mr-1">RX:</span>
+          {lastRaw || <span className="italic opacity-50">a aguardar fim de linha…</span>}
+        </div>
+      )}
+    </div>
   );
 }

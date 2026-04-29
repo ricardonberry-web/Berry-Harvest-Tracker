@@ -17,6 +17,10 @@ interface ScaleContextValue {
   error: string | null;
   /** Last raw line/frame received (debug aid). */
   lastRaw: string;
+  /** Total bytes received since connection opened. */
+  bytesReceived: number;
+  /** Timestamp of last byte received (0 if never). */
+  lastByteAt: number;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
 }
@@ -149,6 +153,8 @@ export function ScaleProvider({ children }: { children: ReactNode }) {
   const [reading, setReading] = useState<WeightReading | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastRaw, setLastRaw] = useState<string>("");
+  const [bytesReceived, setBytesReceived] = useState<number>(0);
+  const [lastByteAt, setLastByteAt] = useState<number>(0);
 
   const portRef = useRef<any>(null);
   const readerRef = useRef<any>(null);
@@ -191,6 +197,10 @@ export function ScaleProvider({ children }: { children: ReactNode }) {
         const { value, done } = await reader.read();
         if (done) break;
         if (!value) continue;
+
+        // Track bytes for diagnostics
+        setBytesReceived(prev => prev + value.length);
+        setLastByteAt(Date.now());
 
         buffer += value;
 
@@ -245,9 +255,19 @@ export function ScaleProvider({ children }: { children: ReactNode }) {
       const port = await navigator.serial.requestPort();
       await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: "none" });
 
+      // Some Bluetooth-Serial bridges (e.g. SH-B30) do NOT start
+      // forwarding bytes until DTR/RTS are asserted. Set both high.
+      try {
+        await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+      } catch (sigErr) {
+        console.warn("[Scale] setSignals not supported / failed:", sigErr);
+      }
+
       portRef.current = port;
       keepReadingRef.current = true;
       lastParseAtRef.current = Date.now();
+      setBytesReceived(0);
+      setLastByteAt(0);
       setStatus("CONNECTED");
 
       readLoop(port);
@@ -271,6 +291,8 @@ export function ScaleProvider({ children }: { children: ReactNode }) {
     setStatus("DISCONNECTED");
     setReading(null);
     setLastRaw("");
+    setBytesReceived(0);
+    setLastByteAt(0);
   }, []);
 
   useEffect(() => {
@@ -281,7 +303,7 @@ export function ScaleProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const value: ScaleContextValue = { status, reading, error, lastRaw, connect, disconnect };
+  const value: ScaleContextValue = { status, reading, error, lastRaw, bytesReceived, lastByteAt, connect, disconnect };
   return createElement(ScaleContext.Provider, { value }, children);
 }
 
