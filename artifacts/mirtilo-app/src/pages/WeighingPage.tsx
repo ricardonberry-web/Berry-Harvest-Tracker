@@ -222,11 +222,22 @@ export default function WeighingPage() {
                   <form onSubmit={handleManualIdSubmit} className="flex gap-2">
                     <input
                       type="text"
+                      list="worker-ids-datalist"
                       placeholder="ID do Trabalhador (ex: W001)"
                       value={manualIdInput}
                       onChange={(e) => setManualIdInput(e.target.value)}
                       className="flex-1 bg-background border-2 border-border rounded-xl px-4 py-3 font-mono uppercase focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-lg"
+                      data-testid="input-worker-id"
                     />
+                    <datalist id="worker-ids-datalist">
+                      {workers
+                        .filter(w => w.active !== false)
+                        .map(w => (
+                          <option key={w.id} value={w.id}>
+                            {w.name}
+                          </option>
+                        ))}
+                    </datalist>
                     <button type="submit" className="bg-primary text-primary-foreground px-6 font-bold rounded-xl hover:opacity-90 transition-opacity text-lg">
                       OK
                     </button>
