@@ -94,6 +94,9 @@ export const ListWeighRecordsResponseItem = zod.object({
   syncStatus: zod.string(),
   createdAt: zod.date(),
   editedAt: zod.date().nullish(),
+  qualityIssues: zod.array(
+    zod.enum(["CALIBRE", "PENDUNCULOS", "VERDE", "MOLE", "OUTROS"]),
+  ),
 });
 export const ListWeighRecordsResponse = zod.array(ListWeighRecordsResponseItem);
 
@@ -107,6 +110,9 @@ export const CreateWeighRecordBody = zod.object({
   unit: zod.string(),
   scaleId: zod.string(),
   rawLine: zod.string(),
+  qualityIssues: zod
+    .array(zod.enum(["CALIBRE", "PENDUNCULOS", "VERDE", "MOLE", "OUTROS"]))
+    .optional(),
 });
 
 /**
@@ -124,6 +130,9 @@ export const UpdateWeighRecordBody = zod.object({
     .number()
     .min(updateWeighRecordBodyWeightGramsMin)
     .max(updateWeighRecordBodyWeightGramsMax),
+  qualityIssues: zod
+    .array(zod.enum(["CALIBRE", "PENDUNCULOS", "VERDE", "MOLE", "OUTROS"]))
+    .optional(),
 });
 
 export const UpdateWeighRecordResponse = zod.object({
@@ -138,6 +147,9 @@ export const UpdateWeighRecordResponse = zod.object({
   syncStatus: zod.string(),
   createdAt: zod.date(),
   editedAt: zod.date().nullish(),
+  qualityIssues: zod.array(
+    zod.enum(["CALIBRE", "PENDUNCULOS", "VERDE", "MOLE", "OUTROS"]),
+  ),
 });
 
 /**
@@ -322,6 +334,18 @@ export const GetWorkerTimesheetResponse = zod.object({
         .number()
         .nullable()
         .describe("hoursWorked \* hourlyRate (null if either is missing)"),
+      totalIssues: zod
+        .number()
+        .describe("Number of quality flags reported on this day."),
+      issuesByType: zod
+        .object({
+          CALIBRE: zod.number(),
+          PENDUNCULOS: zod.number(),
+          VERDE: zod.number(),
+          MOLE: zod.number(),
+          OUTROS: zod.number(),
+        })
+        .describe("Per-type counts of quality occurrences"),
     }),
   ),
   totalDays: zod.number().describe("Number of days with at least a check-in"),
@@ -377,6 +401,20 @@ export const GetDailyReportResponse = zod.object({
       primeiroRegisto: zod.string().nullable(),
       ultimoRegisto: zod.string().nullable(),
       rankKg: zod.number(),
+      totalIssues: zod
+        .number()
+        .describe(
+          "Total number of quality flags reported across all boxes for this worker.",
+        ),
+      issuesByType: zod
+        .object({
+          CALIBRE: zod.number(),
+          PENDUNCULOS: zod.number(),
+          VERDE: zod.number(),
+          MOLE: zod.number(),
+          OUTROS: zod.number(),
+        })
+        .describe("Per-type counts of quality occurrences"),
     }),
   ),
   totalRecords: zod.number(),

@@ -5,6 +5,7 @@
  * API para sistema de pesagem de mirtilo
  * OpenAPI spec version: 1.0.0
  */
+import type { QualityIssueCounts } from "./qualityIssueCounts";
 
 export interface WorkerTimesheetDay {
   date: string;
@@ -19,4 +20,7 @@ export interface WorkerTimesheetDay {
    * @nullable
    */
   pay: number | null;
+  /** Number of quality flags reported on this day. */
+  totalIssues: number;
+  issuesByType: QualityIssueCounts;
 }

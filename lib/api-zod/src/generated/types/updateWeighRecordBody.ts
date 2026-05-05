@@ -5,6 +5,7 @@
  * API para sistema de pesagem de mirtilo
  * OpenAPI spec version: 1.0.0
  */
+import type { QualityIssue } from "./qualityIssue";
 
 export interface UpdateWeighRecordBody {
   /**
@@ -12,4 +13,5 @@ export interface UpdateWeighRecordBody {
    * @maximum 10000
    */
   weightGrams: number;
+  qualityIssues?: QualityIssue[];
 }

@@ -1,8 +1,14 @@
 import { Router, type IRouter } from "express";
-import { and, eq, gte, lte } from "drizzle-orm";
-import { db, workersTable, attendanceTable } from "@workspace/db";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { db, workersTable, attendanceTable, weighRecordsTable } from "@workspace/db";
 
+const BUSINESS_TZ = "Europe/Lisbon";
 const router: IRouter = Router();
+
+type IssueCounts = { CALIBRE: number; PENDUNCULOS: number; VERDE: number; MOLE: number; OUTROS: number };
+function emptyIssues(): IssueCounts {
+  return { CALIBRE: 0, PENDUNCULOS: 0, VERDE: 0, MOLE: 0, OUTROS: 0 };
+}
 
 function todayISO(): string {
   const d = new Date();
@@ -32,6 +38,8 @@ type TimesheetDay = {
   checkOutAt: string | null;
   hoursWorked: number | null;
   pay: number | null;
+  totalIssues: number;
+  issuesByType: IssueCounts;
 };
 
 async function buildTimesheet(workerId: string, from: string, to: string, hourlyRate: number | null) {
@@ -50,6 +58,26 @@ async function buildTimesheet(workerId: string, from: string, to: string, hourly
     )
     .orderBy(attendanceTable.date);
 
+  // Aggregate quality issue counts per day for this worker (Lisbon TZ).
+  const issueRows = await db.execute<{ d: string; issue: string; cnt: number }>(sql`
+    SELECT (${weighRecordsTable.timestamp} AT TIME ZONE ${BUSINESS_TZ})::date::text AS d,
+           issue,
+           COUNT(*)::int AS cnt
+    FROM ${weighRecordsTable},
+         LATERAL unnest(${weighRecordsTable.qualityIssues}) AS issue
+    WHERE ${weighRecordsTable.workerId} = ${workerId}
+      AND (${weighRecordsTable.timestamp} AT TIME ZONE ${BUSINESS_TZ})::date BETWEEN ${from}::date AND ${to}::date
+    GROUP BY d, issue
+  `);
+  const issuesByDay = new Map<string, IssueCounts>();
+  for (const row of issueRows.rows) {
+    const bucket = issuesByDay.get(row.d) ?? emptyIssues();
+    if (row.issue in bucket) {
+      (bucket as Record<string, number>)[row.issue] = Number(row.cnt) || 0;
+    }
+    issuesByDay.set(row.d, bucket);
+  }
+
   const days: TimesheetDay[] = rows.map((r) => {
     const checkIn = r.checkInAt ? new Date(r.checkInAt) : null;
     const checkOut = r.checkOutAt ? new Date(r.checkOutAt) : null;
@@ -62,12 +90,16 @@ async function buildTimesheet(workerId: string, from: string, to: string, hourly
       hoursWorked !== null && hourlyRate !== null
         ? Math.round(hoursWorked * hourlyRate * 100) / 100
         : null;
+    const issuesByType = issuesByDay.get(r.date) ?? emptyIssues();
+    const totalIssues = Object.values(issuesByType).reduce((a, b) => a + b, 0);
     return {
       date: r.date,
       checkInAt: checkIn ? checkIn.toISOString() : null,
       checkOutAt: checkOut ? checkOut.toISOString() : null,
       hoursWorked,
       pay,
+      totalIssues,
+      issuesByType,
     };
   });
 

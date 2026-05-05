@@ -1,8 +1,15 @@
 import { useMemo, useState } from "react";
 import { Layout } from "@/components/Layout";
 import { useGetDailyReport, useListWeighRecords } from "@workspace/api-client-react";
-import { Trophy, Download, Calendar as CalendarIcon, Medal, Filter, ListOrdered, Clock } from "lucide-react";
+import { Trophy, Download, Calendar as CalendarIcon, Medal, Filter, ListOrdered, Clock, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
+import {
+  QUALITY_ISSUES,
+  QUALITY_LABELS,
+  QUALITY_SHORT,
+  QUALITY_CHIP_CLASS,
+  type QualityIssue,
+} from "@/lib/quality-issues";
 
 type SortKey = "kg" | "kgPorHora" | "caixas" | "horas";
 type Tab = "ranking" | "weighings";
@@ -233,6 +240,9 @@ export default function RankingPage() {
                     <th className="p-4 font-bold text-xs uppercase tracking-wider text-primary text-right">Kg / h</th>
                     <th className="p-4 font-bold text-xs uppercase tracking-wider text-muted-foreground text-right hidden sm:table-cell">Méd/Cx</th>
                     <th className="p-4 font-bold text-xs uppercase tracking-wider text-muted-foreground text-right hidden md:table-cell">Cx/h</th>
+                    <th className="p-4 font-bold text-xs uppercase tracking-wider text-amber-700 dark:text-amber-400 text-center hidden sm:table-cell" title="Ocorrências de qualidade reportadas no dia">
+                      <AlertTriangle className="w-3.5 h-3.5 inline" /> Ocor.
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -266,6 +276,36 @@ export default function RankingPage() {
                       </td>
                       <td className="p-4 text-right text-muted-foreground hidden sm:table-cell">{w.mediaGrPorCaixa.toFixed(0)}g</td>
                       <td className="p-4 text-right text-muted-foreground hidden md:table-cell">{w.caixasPorHora.toFixed(1)}</td>
+                      <td className="p-4 text-center hidden sm:table-cell" data-testid={`worker-issues-${w.workerId}`}>
+                        {w.totalIssues > 0 ? (
+                          <div className="inline-flex items-center gap-1" title={
+                            QUALITY_ISSUES
+                              .filter(k => (w.issuesByType?.[k] ?? 0) > 0)
+                              .map(k => `${QUALITY_LABELS[k]}: ${w.issuesByType[k]}`)
+                              .join(" · ")
+                          }>
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                              {w.totalIssues}
+                            </span>
+                            <span className="hidden md:inline-flex gap-0.5">
+                              {QUALITY_ISSUES.map(k => {
+                                const n = w.issuesByType?.[k] ?? 0;
+                                if (!n) return null;
+                                return (
+                                  <span
+                                    key={k}
+                                    className={`text-[9px] font-bold px-1 py-0.5 rounded border ${QUALITY_CHIP_CLASS[k]}`}
+                                  >
+                                    {QUALITY_SHORT[k]}
+                                  </span>
+                                );
+                              })}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -385,6 +425,23 @@ export default function RankingPage() {
                             <span className="ml-2 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full text-amber-800 bg-amber-100 dark:bg-amber-900/50 dark:text-amber-300">
                               ✎ editado
                             </span>
+                          )}
+                          {r.qualityIssues && r.qualityIssues.length > 0 && (
+                            <div className="inline-flex flex-wrap gap-0.5 ml-2 align-middle" data-testid={`weighing-issues-${r.id}`}>
+                              {r.qualityIssues.map(issue => {
+                                if (!(QUALITY_ISSUES as readonly string[]).includes(issue)) return null;
+                                const k = issue as QualityIssue;
+                                return (
+                                  <span
+                                    key={k}
+                                    title={QUALITY_LABELS[k]}
+                                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${QUALITY_CHIP_CLASS[k]}`}
+                                  >
+                                    {QUALITY_SHORT[k]}
+                                  </span>
+                                );
+                              })}
+                            </div>
                           )}
                         </td>
                         <td className="p-3 hidden sm:table-cell">

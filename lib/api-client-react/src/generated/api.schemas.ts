@@ -31,6 +31,16 @@ export interface UpdateWorkerBody {
   active?: boolean;
 }
 
+export type QualityIssue = (typeof QualityIssue)[keyof typeof QualityIssue];
+
+export const QualityIssue = {
+  CALIBRE: "CALIBRE",
+  PENDUNCULOS: "PENDUNCULOS",
+  VERDE: "VERDE",
+  MOLE: "MOLE",
+  OUTROS: "OUTROS",
+} as const;
+
 export interface WeighRecord {
   id: number;
   workerId: string;
@@ -44,6 +54,7 @@ export interface WeighRecord {
   createdAt: string;
   /** @nullable */
   editedAt?: string | null;
+  qualityIssues: QualityIssue[];
 }
 
 export interface CreateWeighRecordBody {
@@ -53,6 +64,7 @@ export interface CreateWeighRecordBody {
   unit: string;
   scaleId: string;
   rawLine: string;
+  qualityIssues?: QualityIssue[];
 }
 
 export interface UpdateWeighRecordBody {
@@ -61,6 +73,18 @@ export interface UpdateWeighRecordBody {
    * @maximum 10000
    */
   weightGrams: number;
+  qualityIssues?: QualityIssue[];
+}
+
+/**
+ * Per-type counts of quality occurrences
+ */
+export interface QualityIssueCounts {
+  CALIBRE: number;
+  PENDUNCULOS: number;
+  VERDE: number;
+  MOLE: number;
+  OUTROS: number;
 }
 
 export interface WorkerDailyStats {
@@ -85,6 +109,9 @@ export interface WorkerDailyStats {
   /** @nullable */
   ultimoRegisto: string | null;
   rankKg: number;
+  /** Total number of quality flags reported across all boxes for this worker. */
+  totalIssues: number;
+  issuesByType: QualityIssueCounts;
 }
 
 export interface WorkerTimesheetDay {
@@ -100,6 +127,9 @@ export interface WorkerTimesheetDay {
    * @nullable
    */
   pay: number | null;
+  /** Number of quality flags reported on this day. */
+  totalIssues: number;
+  issuesByType: QualityIssueCounts;
 }
 
 export interface WorkerTimesheet {

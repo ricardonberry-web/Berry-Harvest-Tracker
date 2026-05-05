@@ -13,6 +13,12 @@ import { QRCodeSVG } from "qrcode.react";
 import { getListWorkersQueryKey } from "@workspace/api-client-react";
 import { format, subDays } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import {
+  QUALITY_ISSUES,
+  QUALITY_LABELS,
+  QUALITY_SHORT,
+  QUALITY_CHIP_CLASS,
+} from "@/lib/quality-issues";
 
 type WorkerRow = { id: string; name: string; active: boolean };
 
@@ -367,16 +373,49 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
                   <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground text-center">Entrada</th>
                   <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground text-center">Saída</th>
                   <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground text-right">Horas</th>
+                  <th className="p-3 font-bold text-xs uppercase tracking-wider text-amber-700 dark:text-amber-400 text-center" title="Ocorrências de qualidade">
+                    <AlertTriangle className="w-3.5 h-3.5 inline" /> Ocor.
+                  </th>
                   <th className="p-3 font-bold text-xs uppercase tracking-wider text-primary text-right">Valor (€)</th>
                 </tr>
               </thead>
               <tbody>
                 {ts.days.map(d => (
-                  <tr key={d.date} className="border-b border-border/50 hover:bg-muted/20">
+                  <tr key={d.date} className="border-b border-border/50 hover:bg-muted/20" data-testid={`timesheet-row-${d.date}`}>
                     <td className="p-3 font-medium text-foreground">{fmtDate(d.date)}</td>
                     <td className="p-3 text-center font-mono text-foreground">{fmtTime(d.checkInAt)}</td>
                     <td className="p-3 text-center font-mono text-foreground">{fmtTime(d.checkOutAt)}</td>
                     <td className="p-3 text-right font-bold text-foreground">{fmtHours(d.hoursWorked)}</td>
+                    <td className="p-3 text-center">
+                      {d.totalIssues > 0 ? (
+                        <div className="inline-flex items-center gap-1" title={
+                          QUALITY_ISSUES
+                            .filter(k => (d.issuesByType?.[k] ?? 0) > 0)
+                            .map(k => `${QUALITY_LABELS[k]}: ${d.issuesByType[k]}`)
+                            .join(" · ")
+                        }>
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                            {d.totalIssues}
+                          </span>
+                          <span className="hidden sm:inline-flex gap-0.5">
+                            {QUALITY_ISSUES.map(k => {
+                              const n = d.issuesByType?.[k] ?? 0;
+                              if (!n) return null;
+                              return (
+                                <span
+                                  key={k}
+                                  className={`text-[9px] font-bold px-1 py-0.5 rounded border ${QUALITY_CHIP_CLASS[k]}`}
+                                >
+                                  {QUALITY_SHORT[k]}
+                                </span>
+                              );
+                            })}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </td>
                     <td className="p-3 text-right">
                       {d.pay !== null ? (
                         <span className="bg-success/10 text-success px-2.5 py-1 rounded-lg font-bold">
@@ -394,6 +433,9 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
                   <tr>
                     <td className="p-3 font-display font-bold uppercase text-foreground" colSpan={3}>Total</td>
                     <td className="p-3 text-right font-display font-black text-foreground text-lg">{ts.totalHours.toFixed(2)} h</td>
+                    <td className="p-3 text-center font-display font-black text-amber-700 dark:text-amber-400 text-lg">
+                      {ts.days.reduce((acc, d) => acc + (d.totalIssues ?? 0), 0)}
+                    </td>
                     <td className="p-3 text-right font-display font-black text-primary text-lg">
                       {ts.totalPay !== null ? `${ts.totalPay.toFixed(2)} €` : "—"}
                     </td>

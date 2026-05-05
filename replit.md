@@ -32,8 +32,10 @@ PWA para Android (Chrome) que regista pesagens de caixas de mirtilo em campo. Co
 
 **Tabelas:**
 - `workers` — trabalhadores (id, name, active, createdAt)
-- `weigh_records` — pesagens (id, workerId, weightGrams, unit, scaleId, rawLine, timestamp)
+- `weigh_records` — pesagens (id, workerId, weightGrams, unit, scaleId, rawLine, timestamp, editedAt, **qualityIssues** text[])
 - `worker_attendance` — entradas/saídas diárias (id, workerId, date, checkInAt, checkOutAt). Único por (workerId, date).
+
+**Quality issues:** cada pesagem pode ter 0+ tags do conjunto `CALIBRE | PENDUNCULOS | VERDE | MOLE | OUTROS`. Reportadas opcionalmente no momento da pesagem (chips por cima do REGISTAR), editáveis no modal de edição, e agregadas em Ranking (coluna "Ocor." por trabalhador) e Timesheet (coluna "Ocor." por dia + total).
 
 **Seed inicial:** W001–W004 (Maria Silva, João Costa, Ana Pereira, Carlos Matos)
 

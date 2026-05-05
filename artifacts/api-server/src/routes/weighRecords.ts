@@ -4,6 +4,20 @@ import { db, weighRecordsTable, workersTable, attendanceTable } from "@workspace
 
 const BUSINESS_TZ = "Europe/Lisbon";
 
+const ALLOWED_QUALITY_ISSUES = ["CALIBRE", "PENDUNCULOS", "VERDE", "MOLE", "OUTROS"] as const;
+type QualityIssue = (typeof ALLOWED_QUALITY_ISSUES)[number];
+
+function sanitizeIssues(input: unknown): QualityIssue[] {
+  if (!Array.isArray(input)) return [];
+  const set = new Set<QualityIssue>();
+  for (const v of input) {
+    if (typeof v === "string" && (ALLOWED_QUALITY_ISSUES as readonly string[]).includes(v)) {
+      set.add(v as QualityIssue);
+    }
+  }
+  return Array.from(set);
+}
+
 function todayISO(date: Date = new Date()): string {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, "0");
@@ -58,6 +72,7 @@ router.get("/weigh-records", async (req, res): Promise<void> => {
       syncStatus: weighRecordsTable.syncStatus,
       createdAt: weighRecordsTable.createdAt,
       editedAt: weighRecordsTable.editedAt,
+      qualityIssues: weighRecordsTable.qualityIssues,
     })
     .from(weighRecordsTable)
     .leftJoin(workersTable, eq(weighRecordsTable.workerId, workersTable.id))
@@ -81,6 +96,7 @@ router.post("/weigh-records", async (req, res): Promise<void> => {
   }
 
   const { workerId, weightGrams, unit, scaleId, rawLine, timestamp } = parsed.data;
+  const qualityIssues = sanitizeIssues((parsed.data as { qualityIssues?: unknown }).qualityIssues);
 
   // Reject if worker hasn't checked in today (or has already checked out)
   const recordDate = todayISO(timestamp ? new Date(timestamp) : new Date());
@@ -107,6 +123,7 @@ router.post("/weigh-records", async (req, res): Promise<void> => {
       rawLine,
       timestamp: timestamp ? new Date(timestamp) : new Date(),
       syncStatus: "SYNCED",
+      qualityIssues,
     })
     .returning();
 
@@ -138,12 +155,18 @@ router.patch("/weigh-records/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  const issuesProvided = (body.data as { qualityIssues?: unknown }).qualityIssues !== undefined;
+  const setPayload: Record<string, unknown> = {
+    weightGrams: body.data.weightGrams,
+    editedAt: new Date(),
+  };
+  if (issuesProvided) {
+    setPayload.qualityIssues = sanitizeIssues((body.data as { qualityIssues?: unknown }).qualityIssues);
+  }
+
   const [updated] = await db
     .update(weighRecordsTable)
-    .set({
-      weightGrams: body.data.weightGrams,
-      editedAt: new Date(),
-    })
+    .set(setPayload)
     .where(eq(weighRecordsTable.id, params.data.id))
     .returning();
 

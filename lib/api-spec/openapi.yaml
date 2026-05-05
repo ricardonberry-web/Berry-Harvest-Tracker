@@ -559,6 +559,15 @@ components:
         active:
           type: boolean
 
+    QualityIssue:
+      type: string
+      enum:
+        - CALIBRE
+        - PENDUNCULOS
+        - VERDE
+        - MOLE
+        - OUTROS
+
     WeighRecord:
       type: object
       properties:
@@ -587,6 +596,10 @@ components:
         editedAt:
           type: ["string", "null"]
           format: date-time
+        qualityIssues:
+          type: array
+          items:
+            $ref: "#/components/schemas/QualityIssue"
       required:
         - id
         - workerId
@@ -598,6 +611,7 @@ components:
         - rawLine
         - syncStatus
         - createdAt
+        - qualityIssues
 
     CreateWeighRecordBody:
       type: object
@@ -615,6 +629,10 @@ components:
           type: string
         rawLine:
           type: string
+        qualityIssues:
+          type: array
+          items:
+            $ref: "#/components/schemas/QualityIssue"
       required:
         - workerId
         - weightGrams
@@ -629,8 +647,33 @@ components:
           type: integer
           minimum: 50
           maximum: 10000
+        qualityIssues:
+          type: array
+          items:
+            $ref: "#/components/schemas/QualityIssue"
       required:
         - weightGrams
+
+    QualityIssueCounts:
+      type: object
+      description: Per-type counts of quality occurrences
+      properties:
+        CALIBRE:
+          type: integer
+        PENDUNCULOS:
+          type: integer
+        VERDE:
+          type: integer
+        MOLE:
+          type: integer
+        OUTROS:
+          type: integer
+      required:
+        - CALIBRE
+        - PENDUNCULOS
+        - VERDE
+        - MOLE
+        - OUTROS
 
     WorkerDailyStats:
       type: object
@@ -659,6 +702,11 @@ components:
           type: ["string", "null"]
         rankKg:
           type: integer
+        totalIssues:
+          type: integer
+          description: Total number of quality flags reported across all boxes for this worker.
+        issuesByType:
+          $ref: "#/components/schemas/QualityIssueCounts"
       required:
         - workerId
         - workerName
@@ -671,6 +719,8 @@ components:
         - primeiroRegisto
         - ultimoRegisto
         - rankKg
+        - totalIssues
+        - issuesByType
 
     WorkerTimesheetDay:
       type: object
@@ -686,12 +736,19 @@ components:
         pay:
           type: ["number", "null"]
           description: hoursWorked * hourlyRate (null if either is missing)
+        totalIssues:
+          type: integer
+          description: Number of quality flags reported on this day.
+        issuesByType:
+          $ref: "#/components/schemas/QualityIssueCounts"
       required:
         - date
         - checkInAt
         - checkOutAt
         - hoursWorked
         - pay
+        - totalIssues
+        - issuesByType
 
     WorkerTimesheet:
       type: object

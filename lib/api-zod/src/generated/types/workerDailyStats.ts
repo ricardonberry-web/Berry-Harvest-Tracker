@@ -5,6 +5,7 @@
  * API para sistema de pesagem de mirtilo
  * OpenAPI spec version: 1.0.0
  */
+import type { QualityIssueCounts } from "./qualityIssueCounts";
 
 export interface WorkerDailyStats {
   workerId: string;
@@ -28,4 +29,7 @@ export interface WorkerDailyStats {
   /** @nullable */
   ultimoRegisto: string | null;
   rankKg: number;
+  /** Total number of quality flags reported across all boxes for this worker. */
+  totalIssues: number;
+  issuesByType: QualityIssueCounts;
 }

@@ -5,6 +5,7 @@
  * API para sistema de pesagem de mirtilo
  * OpenAPI spec version: 1.0.0
  */
+import type { QualityIssue } from "./qualityIssue";
 
 export interface WeighRecord {
   id: number;
@@ -19,4 +20,5 @@ export interface WeighRecord {
   createdAt: Date;
   /** @nullable */
   editedAt?: Date | null;
+  qualityIssues: QualityIssue[];
 }

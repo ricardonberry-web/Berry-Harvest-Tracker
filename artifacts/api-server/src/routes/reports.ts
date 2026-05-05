@@ -36,6 +36,35 @@ router.get("/reports/daily", async (req, res): Promise<void> => {
     .groupBy(weighRecordsTable.workerId, workersTable.name)
     .orderBy(sql`sum(${weighRecordsTable.weightGrams}) desc`);
 
+  // Aggregate quality issue counts per worker for the same day.
+  // unnest(quality_issues) flattens arrays so we can count per type.
+  const issueRows = await db.execute<{
+    worker_id: string;
+    issue: string;
+    cnt: number;
+  }>(sql`
+    SELECT ${weighRecordsTable.workerId} AS worker_id,
+           issue,
+           COUNT(*)::int AS cnt
+    FROM ${weighRecordsTable},
+         LATERAL unnest(${weighRecordsTable.qualityIssues}) AS issue
+    WHERE (${weighRecordsTable.timestamp} AT TIME ZONE ${BUSINESS_TZ})::date = ${dateStr}::date
+    GROUP BY ${weighRecordsTable.workerId}, issue
+  `);
+  const issuesByWorker = new Map<string, Record<string, number>>();
+  for (const row of issueRows.rows) {
+    const map = issuesByWorker.get(row.worker_id) ?? {};
+    map[row.issue] = Number(row.cnt) || 0;
+    issuesByWorker.set(row.worker_id, map);
+  }
+  const emptyIssues = (): { CALIBRE: number; PENDUNCULOS: number; VERDE: number; MOLE: number; OUTROS: number } => ({
+    CALIBRE: 0,
+    PENDUNCULOS: 0,
+    VERDE: 0,
+    MOLE: 0,
+    OUTROS: 0,
+  });
+
   // Load attendance for the day so we can compute hoursWorked / kgPorHora from real check-in/out
   const attendance = await db
     .select()
@@ -74,6 +103,13 @@ router.get("/reports/daily", async (req, res): Promise<void> => {
       caixasPorHora = h > 0 ? Math.round((r.totalCaixas / h) * 100) / 100 : 0;
     }
 
+    const counts = issuesByWorker.get(r.workerId) ?? {};
+    const issuesByType = emptyIssues();
+    for (const k of Object.keys(issuesByType) as Array<keyof typeof issuesByType>) {
+      issuesByType[k] = counts[k] ?? 0;
+    }
+    const totalIssues = Object.values(issuesByType).reduce((a, b) => a + b, 0);
+
     return {
       workerId: r.workerId,
       workerName: r.workerName ?? r.workerId,
@@ -86,6 +122,8 @@ router.get("/reports/daily", async (req, res): Promise<void> => {
       primeiroRegisto: r.primeiroRegisto ?? null,
       ultimoRegisto: r.ultimoRegisto ?? null,
       rankKg: idx + 1,
+      totalIssues,
+      issuesByType,
     };
   });
 

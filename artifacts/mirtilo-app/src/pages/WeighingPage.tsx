@@ -13,12 +13,19 @@ import {
 } from "@workspace/api-client-react";
 import {
   X, User, Scale, AlertCircle, Trash2, CheckCircle2,
-  Keyboard, Usb, ZapOff, ScanLine, LogIn, Pencil, Save,
+  Keyboard, Usb, ZapOff, ScanLine, LogIn, Pencil, Save, AlertTriangle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import {
+  QUALITY_ISSUES,
+  QUALITY_LABELS,
+  QUALITY_SHORT,
+  QUALITY_CHIP_CLASS,
+  type QualityIssue,
+} from "@/lib/quality-issues";
 
 type WeightMode = "scale" | "manual";
 
@@ -65,17 +72,37 @@ export default function WeighingPage() {
   const updateRecord = useUpdateWeighRecord();
   const deleteRecord = useDeleteWeighRecord();
 
-  // ── Edit/delete state for the records list ──
-  const [editingRecord, setEditingRecord] = useState<{ id: number; weightGrams: number } | null>(null);
-  const [editGramsInput, setEditGramsInput] = useState("");
+  // ── Quality issues for the next box ──
+  const [pendingIssues, setPendingIssues] = useState<Set<QualityIssue>>(new Set());
+  const toggleIssue = (k: QualityIssue) => {
+    setPendingIssues(prev => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k); else next.add(k);
+      return next;
+    });
+  };
 
-  const openEdit = (id: number, weightGrams: number) => {
-    setEditingRecord({ id, weightGrams });
+  // ── Edit/delete state for the records list ──
+  const [editingRecord, setEditingRecord] = useState<{
+    id: number;
+    weightGrams: number;
+    qualityIssues: QualityIssue[];
+  } | null>(null);
+  const [editGramsInput, setEditGramsInput] = useState("");
+  const [editIssues, setEditIssues] = useState<Set<QualityIssue>>(new Set());
+
+  const openEdit = (id: number, weightGrams: number, qualityIssues: string[] | undefined | null) => {
+    const issues = (qualityIssues ?? []).filter((v): v is QualityIssue =>
+      (QUALITY_ISSUES as readonly string[]).includes(v),
+    );
+    setEditingRecord({ id, weightGrams, qualityIssues: issues });
     setEditGramsInput(String(Math.round(weightGrams)));
+    setEditIssues(new Set(issues));
   };
   const closeEdit = () => {
     setEditingRecord(null);
     setEditGramsInput("");
+    setEditIssues(new Set());
   };
   const submitEdit = async () => {
     if (!editingRecord) return;
@@ -90,7 +117,10 @@ export default function WeighingPage() {
       return;
     }
     try {
-      await updateRecord.mutateAsync({ id: editingRecord.id, data: { weightGrams: g } });
+      await updateRecord.mutateAsync({
+        id: editingRecord.id,
+        data: { weightGrams: g, qualityIssues: Array.from(editIssues) },
+      });
       beep("success");
       await refetchRecords();
       closeEdit();
@@ -122,6 +152,7 @@ export default function WeighingPage() {
     if (worker) {
       beep("success");
       setActiveWorkerId(worker.id);
+      setPendingIssues(new Set());
       setShowScanner(false);
       toast({ title: "Trabalhador Identificado", description: `${worker.name} (${worker.id})` });
     } else {
@@ -158,6 +189,7 @@ export default function WeighingPage() {
     if (worker) {
       beep("success");
       setActiveWorkerId(worker.id);
+      setPendingIssues(new Set());
       setManualIdInput("");
       toast({ title: "Trabalhador Identificado", description: `${worker.name} (${worker.id})` });
     } else {
@@ -206,6 +238,7 @@ export default function WeighingPage() {
       const rawLine =
         weight.source === "scale" ? (reading?.rawLine ?? "") : `${scaleId}:${weight.grams}g`;
 
+      const issues = Array.from(pendingIssues);
       await createRecord.mutateAsync({
         data: {
           workerId: activeWorkerId,
@@ -214,6 +247,7 @@ export default function WeighingPage() {
           scaleId,
           rawLine,
           timestamp: new Date().toISOString(),
+          qualityIssues: issues,
         },
       });
       beep("success");
@@ -223,9 +257,12 @@ export default function WeighingPage() {
       // Reset workflow for the next worker / next box
       setManualGrams("");
       setActiveWorkerId(null);
+      setPendingIssues(new Set());
       toast({
         title: "Caixa registada",
-        description: `${weight.grams} g — pronto para o próximo trabalhador.`,
+        description: issues.length
+          ? `${weight.grams} g · ocorrências: ${issues.map(i => QUALITY_LABELS[i]).join(", ")}.`
+          : `${weight.grams} g — pronto para o próximo trabalhador.`,
       });
     } catch (err: unknown) {
       beep("error");
@@ -356,7 +393,7 @@ export default function WeighingPage() {
                 </span>
               </div>
               <button
-                onClick={() => setActiveWorkerId(null)}
+                onClick={() => { setActiveWorkerId(null); setPendingIssues(new Set()); }}
                 className="bg-white/10 hover:bg-white/20 p-3 rounded-full transition-colors"
               >
                 <X className="w-6 h-6" />
@@ -488,6 +525,50 @@ export default function WeighingPage() {
           </div>
         </div>
 
+        {/* ══════ QUALITY ISSUES (compact, optional) ══════ */}
+        {activeWorkerId && activeWorkerCheckedIn && (
+          <div
+            className="bg-card/80 border border-border rounded-xl px-3 py-2 flex items-center gap-2 flex-wrap"
+            data-testid="quality-chip-row"
+          >
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1 shrink-0">
+              <AlertTriangle className="w-3 h-3" />
+              Reportar
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {QUALITY_ISSUES.map(k => {
+                const on = pendingIssues.has(k);
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => toggleIssue(k)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${
+                      on
+                        ? `${QUALITY_CHIP_CLASS[k]} ring-2 ring-offset-1 ring-offset-background ring-current`
+                        : "bg-muted/40 text-muted-foreground border-border hover:bg-muted"
+                    }`}
+                    data-testid={`quality-chip-${k.toLowerCase()}`}
+                    aria-pressed={on}
+                  >
+                    {QUALITY_LABELS[k]}
+                  </button>
+                );
+              })}
+              {pendingIssues.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPendingIssues(new Set())}
+                  className="text-[11px] text-muted-foreground hover:text-foreground underline ml-1"
+                  data-testid="quality-chip-clear"
+                >
+                  limpar
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ══════ REGISTER BUTTON ══════ */}
         <button
           onClick={handleWeigh}
@@ -539,7 +620,7 @@ export default function WeighingPage() {
                         }`}
                         data-testid={`record-row-${record.id}`}
                       >
-                        <div>
+                        <div className="min-w-0">
                           <p className="font-mono text-2xl font-bold text-foreground leading-none">{record.weightGrams} g</p>
                           <p className="text-xs text-muted-foreground mt-1">
                             {format(new Date(record.timestamp), "HH:mm:ss")}
@@ -549,6 +630,23 @@ export default function WeighingPage() {
                               </span>
                             )}
                           </p>
+                          {record.qualityIssues && record.qualityIssues.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5" data-testid={`record-issues-${record.id}`}>
+                              {record.qualityIssues.map(issue => {
+                                if (!(QUALITY_ISSUES as readonly string[]).includes(issue)) return null;
+                                const k = issue as QualityIssue;
+                                return (
+                                  <span
+                                    key={k}
+                                    title={QUALITY_LABELS[k]}
+                                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${QUALITY_CHIP_CLASS[k]}`}
+                                  >
+                                    {QUALITY_SHORT[k]}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
                           {wasEdited ? (
@@ -565,7 +663,7 @@ export default function WeighingPage() {
                             </span>
                           )}
                           <button
-                            onClick={() => openEdit(record.id, record.weightGrams)}
+                            onClick={() => openEdit(record.id, record.weightGrams, record.qualityIssues as string[] | undefined)}
                             className="p-2 text-muted-foreground hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
                             data-testid={`button-edit-record-${record.id}`}
                             title="Editar peso"
@@ -627,6 +725,37 @@ export default function WeighingPage() {
                     Permitido entre {MIN_GRAMS} g e {MAX_GRAMS} g
                   </p>
                 </label>
+
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5" /> Ocorrências de qualidade
+                  </span>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {QUALITY_ISSUES.map(k => {
+                      const on = editIssues.has(k);
+                      return (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => setEditIssues(prev => {
+                            const next = new Set(prev);
+                            if (next.has(k)) next.delete(k); else next.add(k);
+                            return next;
+                          })}
+                          className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${
+                            on
+                              ? `${QUALITY_CHIP_CLASS[k]} ring-2 ring-offset-1 ring-offset-background ring-current`
+                              : "bg-muted/40 text-muted-foreground border-border hover:bg-muted"
+                          }`}
+                          data-testid={`edit-quality-chip-${k.toLowerCase()}`}
+                          aria-pressed={on}
+                        >
+                          {QUALITY_LABELS[k]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 <p className="text-xs text-muted-foreground text-center">
                   O registo ficará marcado como <span className="font-bold text-amber-600">editado</span> e o valor anterior <strong>não</strong> é mantido.
