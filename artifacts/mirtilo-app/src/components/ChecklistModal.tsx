@@ -8,13 +8,8 @@ export function ChecklistModal() {
   // Tasks state
   const [tasks, setTasks] = useState([
     { id: "t1", label: "Balança ligada e estável (aguardar 30s)", checked: false, section: "MANHÃ" },
-    { id: "t2", label: "Bateria do tablet ≥ 50%", checked: false, section: "MANHÃ" },
-    { id: "t3", label: "Ligação à balança confirmada (USB-OTG)", checked: false, section: "MANHÃ" },
     { id: "t4", label: "Tare feita com recipiente vazio", checked: false, section: "MANHÃ" },
-    { id: "t5", label: "Peso de controlo verificado (±2%)", checked: false, section: "MANHÃ" },
-    { id: "t6", label: "Data/hora correctas no dispositivo", checked: false, section: "MANHÃ" },
-    { id: "e1", label: "Cabo USB-OTG bem ligado", checked: false, section: "EQUIPAMENTO" },
-    { id: "e2", label: "Conversor FTDI/CP210x conectado", checked: false, section: "EQUIPAMENTO" }
+    { id: "e1", label: "Cabo USB-OTG bem ligado", checked: false, section: "EQUIPAMENTO" }
   ]);
 
   // Check if shown today
