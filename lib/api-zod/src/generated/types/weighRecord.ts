@@ -17,4 +17,6 @@ export interface WeighRecord {
   rawLine: string;
   syncStatus: string;
   createdAt: Date;
+  /** @nullable */
+  editedAt?: Date | null;
 }

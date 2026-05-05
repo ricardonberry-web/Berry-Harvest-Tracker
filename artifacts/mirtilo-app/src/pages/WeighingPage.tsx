@@ -8,10 +8,12 @@ import {
   useCreateWeighRecord,
   useListWeighRecords,
   useListAttendance,
+  useUpdateWeighRecord,
+  useDeleteWeighRecord,
 } from "@workspace/api-client-react";
 import {
   X, User, Scale, AlertCircle, Trash2, CheckCircle2,
-  Keyboard, Usb, ZapOff, ScanLine, LogIn,
+  Keyboard, Usb, ZapOff, ScanLine, LogIn, Pencil, Save,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
@@ -53,12 +55,64 @@ export default function WeighingPage() {
   const activeWorker = workers.find(w => w.id === activeWorkerId);
   const activeWorkerCheckedIn = activeWorkerId ? checkedInIds.has(activeWorkerId) : false;
 
+  const todayISO = format(new Date(), "yyyy-MM-dd");
   const { data: todayRecords = [], refetch: refetchRecords } = useListWeighRecords(
-    { workerId: activeWorkerId || undefined, limit: 10 },
+    { workerId: activeWorkerId || undefined, date: todayISO, limit: 50 },
     { query: { enabled: !!activeWorkerId } },
   );
 
   const createRecord = useCreateWeighRecord();
+  const updateRecord = useUpdateWeighRecord();
+  const deleteRecord = useDeleteWeighRecord();
+
+  // ── Edit/delete state for the records list ──
+  const [editingRecord, setEditingRecord] = useState<{ id: number; weightGrams: number } | null>(null);
+  const [editGramsInput, setEditGramsInput] = useState("");
+
+  const openEdit = (id: number, weightGrams: number) => {
+    setEditingRecord({ id, weightGrams });
+    setEditGramsInput(String(Math.round(weightGrams)));
+  };
+  const closeEdit = () => {
+    setEditingRecord(null);
+    setEditGramsInput("");
+  };
+  const submitEdit = async () => {
+    if (!editingRecord) return;
+    const g = parseInt(editGramsInput, 10);
+    if (isNaN(g) || g < MIN_GRAMS || g > MAX_GRAMS) {
+      beep("error");
+      toast({
+        title: "Peso inválido",
+        description: `O valor tem de estar entre ${MIN_GRAMS} e ${MAX_GRAMS} g.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      await updateRecord.mutateAsync({ id: editingRecord.id, data: { weightGrams: g } });
+      beep("success");
+      await refetchRecords();
+      closeEdit();
+      toast({ title: "Pesagem corrigida", description: `Novo valor: ${g} g.` });
+    } catch {
+      beep("error");
+      toast({ title: "Erro ao guardar", description: "Tente novamente.", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteRecord = async (id: number) => {
+    if (!window.confirm("Apagar esta pesagem? Esta acção não pode ser desfeita.")) return;
+    try {
+      await deleteRecord.mutateAsync({ id });
+      beep("success");
+      await refetchRecords();
+      toast({ title: "Pesagem apagada" });
+    } catch {
+      beep("error");
+      toast({ title: "Erro ao apagar", variant: "destructive" });
+    }
+  };
 
   // ── QR Scanner ──
   const startScannerRef = useRef<() => void>(() => {});
@@ -471,39 +525,136 @@ export default function WeighingPage() {
             ) : (
               <div className="space-y-3">
                 <AnimatePresence>
-                  {todayRecords.map((record) => (
-                    <motion.div
-                      key={record.id}
-                      initial={{ opacity: 0, y: -16 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="flex items-center justify-between p-4 bg-background border border-border rounded-xl"
-                    >
-                      <div>
-                        <p className="font-mono text-2xl font-bold text-foreground leading-none">{record.weightGrams} g</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {format(new Date(record.timestamp), "HH:mm:ss")}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                          record.scaleId?.includes("MANUAL")
-                            ? "text-orange-700 bg-orange-100 dark:bg-orange-900/40 dark:text-orange-300"
-                            : "text-green-700 bg-green-100 dark:bg-green-900/40 dark:text-green-300"
-                        }`}>
-                          {record.scaleId?.includes("MANUAL") ? "✍ manual" : "⚖ balança"}
-                        </span>
-                        <button className="p-2 text-muted-foreground hover:text-destructive transition-colors rounded-lg hover:bg-destructive/10">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </motion.div>
-                  ))}
+                  {todayRecords.map((record) => {
+                    const wasEdited = !!record.editedAt;
+                    return (
+                      <motion.div
+                        key={record.id}
+                        initial={{ opacity: 0, y: -16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={`flex items-center justify-between p-4 border rounded-xl transition-colors ${
+                          wasEdited
+                            ? "bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800"
+                            : "bg-background border-border"
+                        }`}
+                        data-testid={`record-row-${record.id}`}
+                      >
+                        <div>
+                          <p className="font-mono text-2xl font-bold text-foreground leading-none">{record.weightGrams} g</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {format(new Date(record.timestamp), "HH:mm:ss")}
+                            {wasEdited && (
+                              <span className="ml-2 text-amber-700 dark:text-amber-400 font-medium">
+                                · editado {format(new Date(record.editedAt as string), "HH:mm")}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {wasEdited ? (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full text-amber-800 bg-amber-100 dark:bg-amber-900/50 dark:text-amber-300">
+                              ✎ editado
+                            </span>
+                          ) : (
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                              record.scaleId?.includes("MANUAL")
+                                ? "text-orange-700 bg-orange-100 dark:bg-orange-900/40 dark:text-orange-300"
+                                : "text-green-700 bg-green-100 dark:bg-green-900/40 dark:text-green-300"
+                            }`}>
+                              {record.scaleId?.includes("MANUAL") ? "✍ manual" : "⚖ balança"}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => openEdit(record.id, record.weightGrams)}
+                            className="p-2 text-muted-foreground hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
+                            data-testid={`button-edit-record-${record.id}`}
+                            title="Editar peso"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteRecord(record.id)}
+                            className="p-2 text-muted-foreground hover:text-destructive transition-colors rounded-lg hover:bg-destructive/10"
+                            data-testid={`button-delete-record-${record.id}`}
+                            title="Apagar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
                 </AnimatePresence>
               </div>
             )}
           </div>
         )}
       </div>
+
+      {/* ══════ EDIT RECORD MODAL ══════ */}
+      <AnimatePresence>
+        {editingRecord && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-card w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
+            >
+              <div className="bg-amber-500 p-5 text-white flex items-center gap-3">
+                <Pencil className="w-6 h-6" />
+                <div>
+                  <h3 className="text-xl font-display font-bold">Corrigir Pesagem</h3>
+                  <p className="text-white/80 text-sm">Valor original: {editingRecord.weightGrams} g</p>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <label className="block">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Novo peso (gramas)</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={editGramsInput}
+                    onChange={(e) => setEditGramsInput(e.target.value)}
+                    autoFocus
+                    min={MIN_GRAMS}
+                    max={MAX_GRAMS}
+                    className="mt-2 w-full bg-background border-2 border-border rounded-xl px-4 py-3 font-mono text-2xl text-center focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    data-testid="input-edit-grams"
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground text-center">
+                    Permitido entre {MIN_GRAMS} g e {MAX_GRAMS} g
+                  </p>
+                </label>
+
+                <p className="text-xs text-muted-foreground text-center">
+                  O registo ficará marcado como <span className="font-bold text-amber-600">editado</span> e o valor anterior <strong>não</strong> é mantido.
+                </p>
+              </div>
+
+              <div className="p-4 bg-muted/30 border-t border-border flex gap-2">
+                <button
+                  onClick={closeEdit}
+                  className="flex-1 py-3 rounded-xl font-bold bg-muted hover:bg-muted/70 text-foreground transition-colors"
+                  data-testid="button-cancel-edit"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={submitEdit}
+                  disabled={updateRecord.isPending}
+                  className="flex-1 py-3 rounded-xl font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  data-testid="button-save-edit"
+                >
+                  <Save className="w-4 h-4" />
+                  {updateRecord.isPending ? "A guardar…" : "Guardar"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </Layout>
   );
 }

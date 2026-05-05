@@ -47,8 +47,9 @@ PWA para Android (Chrome) que regista pesagens de caixas de mirtilo em campo. Co
 | GET | `/api/workers/:id` | Trabalhador por ID |
 | PATCH | `/api/workers/:id` | Actualiza trabalhador |
 | DELETE | `/api/workers/:id` | Remove trabalhador |
-| GET | `/api/weigh-records` | Lista pesagens (filtros: workerId, date, limit) |
+| GET | `/api/weigh-records` | Lista pesagens (filtros: workerId, date, limit). `date` é interpretado em fuso horário **Europe/Lisbon**. |
 | POST | `/api/weigh-records` | Regista pesagem (rejeita 403 se trabalhador sem entrada) |
+| PATCH | `/api/weigh-records/:id` | Corrige peso (50–10000 g, inteiro). Marca `editedAt`. |
 | DELETE | `/api/weigh-records/:id` | Remove pesagem |
 | GET | `/api/attendance?date=` | Lista entradas/saídas de um dia (default: hoje) |
 | POST | `/api/attendance/check-in` | Entrada de um trabalhador |

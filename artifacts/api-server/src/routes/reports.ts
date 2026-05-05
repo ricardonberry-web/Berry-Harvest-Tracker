@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
-import { eq, and, gte, lt, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { db, weighRecordsTable, workersTable, attendanceTable } from "@workspace/db";
 import {
   GetDailyReportQueryParams,
   ExportRecordsQueryParams,
 } from "@workspace/api-zod";
 
+const BUSINESS_TZ = "Europe/Lisbon";
 const router: IRouter = Router();
 
 router.get("/reports/daily", async (req, res): Promise<void> => {
@@ -16,10 +17,6 @@ router.get("/reports/daily", async (req, res): Promise<void> => {
   }
 
   const dateStr = query.data.date ?? new Date().toISOString().split("T")[0];
-  const dayStart = new Date(dateStr);
-  dayStart.setUTCHours(0, 0, 0, 0);
-  const dayEnd = new Date(dateStr);
-  dayEnd.setUTCHours(23, 59, 59, 999);
 
   const records = await db
     .select({
@@ -34,10 +31,7 @@ router.get("/reports/daily", async (req, res): Promise<void> => {
     .from(weighRecordsTable)
     .leftJoin(workersTable, eq(weighRecordsTable.workerId, workersTable.id))
     .where(
-      and(
-        gte(weighRecordsTable.timestamp, dayStart),
-        lt(weighRecordsTable.timestamp, dayEnd)
-      )
+      sql`(${weighRecordsTable.timestamp} AT TIME ZONE ${BUSINESS_TZ})::date = ${dateStr}::date`,
     )
     .groupBy(weighRecordsTable.workerId, workersTable.name)
     .orderBy(sql`sum(${weighRecordsTable.weightGrams}) desc`);
@@ -111,14 +105,9 @@ router.get("/reports/export", async (req, res): Promise<void> => {
   }
 
   const dateStr = query.data.date ?? new Date().toISOString().split("T")[0];
-  const dayStart = new Date(dateStr);
-  dayStart.setUTCHours(0, 0, 0, 0);
-  const dayEnd = new Date(dateStr);
-  dayEnd.setUTCHours(23, 59, 59, 999);
 
   const conditions = [
-    gte(weighRecordsTable.timestamp, dayStart),
-    lt(weighRecordsTable.timestamp, dayEnd),
+    sql`(${weighRecordsTable.timestamp} AT TIME ZONE ${BUSINESS_TZ})::date = ${dateStr}::date`,
   ];
 
   if (query.data.workerId) {

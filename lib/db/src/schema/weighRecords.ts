@@ -13,6 +13,7 @@ export const weighRecordsTable = pgTable("weigh_records", {
   rawLine: text("raw_line").notNull(),
   syncStatus: text("sync_status").notNull().default("SYNCED"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
 });
 
 export const insertWeighRecordSchema = createInsertSchema(weighRecordsTable).omit({ id: true, createdAt: true });

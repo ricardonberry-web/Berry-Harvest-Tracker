@@ -20,6 +20,7 @@ export * from "./getWorkerTimesheetParams";
 export * from "./healthStatus";
 export * from "./listAttendanceParams";
 export * from "./listWeighRecordsParams";
+export * from "./updateWeighRecordBody";
 export * from "./updateWorkerBody";
 export * from "./weighRecord";
 export * from "./worker";

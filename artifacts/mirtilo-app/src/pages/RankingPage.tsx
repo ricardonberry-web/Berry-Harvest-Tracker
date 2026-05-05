@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { Layout } from "@/components/Layout";
-import { useGetDailyReport } from "@workspace/api-client-react";
-import { Trophy, Download, Calendar as CalendarIcon, Medal, Filter } from "lucide-react";
+import { useGetDailyReport, useListWeighRecords } from "@workspace/api-client-react";
+import { Trophy, Download, Calendar as CalendarIcon, Medal, Filter, ListOrdered, Clock } from "lucide-react";
 import { format } from "date-fns";
 
 type SortKey = "kg" | "kgPorHora" | "caixas" | "horas";
+type Tab = "ranking" | "weighings";
 
 function fmtHours(h: number | null | undefined) {
   if (h === null || h === undefined) return "—";
@@ -17,10 +18,49 @@ export default function RankingPage() {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [sortKey, setSortKey] = useState<SortKey>("kg");
   const [onlyWithHours, setOnlyWithHours] = useState(false);
+  const [tab, setTab] = useState<Tab>("ranking");
+  const [hourFrom, setHourFrom] = useState("00:00");
+  const [hourTo, setHourTo] = useState("23:59");
+  const [workerFilter, setWorkerFilter] = useState("");
 
   const { data: report, isLoading } = useGetDailyReport(
     { date },
     { query: { keepPreviousData: true } },
+  );
+
+  const { data: allRecords = [], isLoading: recordsLoading } = useListWeighRecords(
+    { date },
+    { query: { keepPreviousData: true } },
+  );
+
+  const hourRangeInverted = useMemo(() => {
+    const [fh, fm] = hourFrom.split(":").map(Number);
+    const [th, tm] = hourTo.split(":").map(Number);
+    return ((fh ?? 0) * 60 + (fm ?? 0)) > ((th ?? 23) * 60 + (tm ?? 59));
+  }, [hourFrom, hourTo]);
+
+  const filteredRecords = useMemo(() => {
+    const [fh, fm] = hourFrom.split(":").map(Number);
+    const [th, tm] = hourTo.split(":").map(Number);
+    // Auto-swap if user inverted the range so the filter remains useful.
+    const fromRaw = (fh ?? 0) * 60 + (fm ?? 0);
+    const toRaw = (th ?? 23) * 60 + (tm ?? 59);
+    const fromMin = Math.min(fromRaw, toRaw);
+    const toMin = Math.max(fromRaw, toRaw);
+    const wf = workerFilter.trim().toLowerCase();
+    return allRecords.filter(r => {
+      const d = new Date(r.timestamp);
+      const min = d.getHours() * 60 + d.getMinutes();
+      if (min < fromMin || min > toMin) return false;
+      if (wf && !r.workerId.toLowerCase().includes(wf) && !r.workerName.toLowerCase().includes(wf))
+        return false;
+      return true;
+    });
+  }, [allRecords, hourFrom, hourTo, workerFilter]);
+
+  const filteredTotalKg = useMemo(
+    () => filteredRecords.reduce((acc, r) => acc + r.weightGrams, 0) / 1000,
+    [filteredRecords],
   );
 
   const sortedWorkers = useMemo(() => {
@@ -105,6 +145,34 @@ export default function RankingPage() {
           />
         </div>
 
+        {/* Tabs */}
+        <div className="bg-card border border-border rounded-2xl p-1 flex gap-1" data-testid="ranking-tabs">
+          <button
+            onClick={() => setTab("ranking")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-sm transition-colors ${
+              tab === "ranking"
+                ? "bg-primary text-primary-foreground shadow"
+                : "text-muted-foreground hover:bg-muted/50"
+            }`}
+            data-testid="tab-ranking"
+          >
+            <Trophy className="w-4 h-4" /> Ranking por trabalhador
+          </button>
+          <button
+            onClick={() => setTab("weighings")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-sm transition-colors ${
+              tab === "weighings"
+                ? "bg-primary text-primary-foreground shadow"
+                : "text-muted-foreground hover:bg-muted/50"
+            }`}
+            data-testid="tab-weighings"
+          >
+            <ListOrdered className="w-4 h-4" /> Pesagens do dia
+          </button>
+        </div>
+
+        {tab === "ranking" && (
+        <>
         {/* Filter / sort bar */}
         <div className="bg-card border border-border rounded-2xl p-4 flex flex-col md:flex-row md:items-center gap-3">
           <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground uppercase tracking-wider">
@@ -205,6 +273,139 @@ export default function RankingPage() {
             </div>
           )}
         </div>
+        </>
+        )}
+
+        {tab === "weighings" && (
+        <>
+        {/* Hour / worker filter bar */}
+        <div className="bg-card border border-border rounded-2xl p-4 flex flex-col md:flex-row md:items-end gap-4">
+          <div className="flex items-end gap-2">
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1.5">
+                <Clock className="w-3.5 h-3.5" /> Desde
+              </span>
+              <input
+                type="time"
+                value={hourFrom}
+                onChange={(e) => setHourFrom(e.target.value)}
+                className="bg-background border border-border rounded-lg px-3 py-2 font-mono text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                data-testid="input-hour-from"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1.5">
+                <Clock className="w-3.5 h-3.5" /> Até
+              </span>
+              <input
+                type="time"
+                value={hourTo}
+                onChange={(e) => setHourTo(e.target.value)}
+                className="bg-background border border-border rounded-lg px-3 py-2 font-mono text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                data-testid="input-hour-to"
+              />
+            </label>
+          </div>
+
+          <label className="block flex-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1.5">
+              <Filter className="w-3.5 h-3.5" /> Filtrar trabalhador
+            </span>
+            <input
+              type="text"
+              value={workerFilter}
+              onChange={(e) => setWorkerFilter(e.target.value)}
+              placeholder="ID ou nome…"
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              data-testid="input-worker-filter"
+            />
+          </label>
+
+          <div className="md:ml-auto text-right shrink-0">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">No filtro</p>
+            <p className="text-2xl font-display font-bold text-primary" data-testid="text-filtered-total">
+              {filteredRecords.length} <span className="text-sm font-medium text-muted-foreground">caixas · </span>
+              {filteredTotalKg.toFixed(2)} <span className="text-sm font-medium text-muted-foreground">kg</span>
+            </p>
+          </div>
+        </div>
+
+        {hourRangeInverted && (
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300/60 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 rounded-xl px-4 py-2 text-sm">
+            Intervalo de horas invertido — a mostrar mesmo assim entre {hourTo} e {hourFrom}.
+          </div>
+        )}
+
+        {/* Weighings table */}
+        <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+          {recordsLoading ? (
+            <div className="p-12 flex justify-center">
+              <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+            </div>
+          ) : !filteredRecords.length ? (
+            <div className="p-12 text-center text-muted-foreground">
+              <ListOrdered className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              <p>Sem pesagens no intervalo seleccionado.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse" data-testid="weighings-table">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border">
+                    <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground">Hora</th>
+                    <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground">Trabalhador</th>
+                    <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground text-right">Peso</th>
+                    <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Origem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRecords.map((r) => {
+                    const wasEdited = !!r.editedAt;
+                    return (
+                      <tr
+                        key={r.id}
+                        className={`border-b border-border/50 transition-colors ${
+                          wasEdited
+                            ? "bg-amber-50/60 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-950/40"
+                            : "hover:bg-muted/20"
+                        }`}
+                        data-testid={`weighing-row-${r.id}`}
+                      >
+                        <td className="p-3 font-mono text-sm">
+                          {format(new Date(r.timestamp), "HH:mm:ss")}
+                        </td>
+                        <td className="p-3">
+                          <p className="font-bold text-foreground text-sm">{r.workerName}</p>
+                          <p className="text-xs text-muted-foreground font-mono">{r.workerId}</p>
+                        </td>
+                        <td className="p-3 text-right">
+                          <span className="font-mono font-bold text-lg text-foreground">{r.weightGrams}</span>
+                          <span className="text-muted-foreground text-xs ml-1">g</span>
+                          {wasEdited && (
+                            <span className="ml-2 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full text-amber-800 bg-amber-100 dark:bg-amber-900/50 dark:text-amber-300">
+                              ✎ editado
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 hidden sm:table-cell">
+                          <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                            r.scaleId?.includes("MANUAL")
+                              ? "text-orange-700 bg-orange-100 dark:bg-orange-900/40 dark:text-orange-300"
+                              : "text-green-700 bg-green-100 dark:bg-green-900/40 dark:text-green-300"
+                          }`}>
+                            {r.scaleId?.includes("MANUAL") ? "✍ manual" : "⚖ balança"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        </>
+        )}
 
       </div>
     </Layout>

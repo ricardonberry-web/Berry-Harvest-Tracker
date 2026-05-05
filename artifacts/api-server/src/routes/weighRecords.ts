@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
-import { eq, and, gte, lt, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { db, weighRecordsTable, workersTable, attendanceTable } from "@workspace/db";
+
+const BUSINESS_TZ = "Europe/Lisbon";
 
 function todayISO(date: Date = new Date()): string {
   const yyyy = date.getFullYear();
@@ -13,6 +15,8 @@ import {
   DeleteWeighRecordParams,
   ListWeighRecordsQueryParams,
   ListWeighRecordsResponse,
+  UpdateWeighRecordBody,
+  UpdateWeighRecordParams,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -33,12 +37,12 @@ router.get("/weigh-records", async (req, res): Promise<void> => {
   }
 
   if (date) {
-    const dayStart = new Date(date);
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const dayEnd = new Date(date);
-    dayEnd.setUTCHours(23, 59, 59, 999);
-    conditions.push(gte(weighRecordsTable.timestamp, dayStart));
-    conditions.push(lt(weighRecordsTable.timestamp, dayEnd));
+    // Compare the timestamp's *local* date (Europe/Lisbon) to the requested date,
+    // so records made near midnight local time fall in the correct business day
+    // regardless of the server / DB time zone.
+    conditions.push(
+      sql`(${weighRecordsTable.timestamp} AT TIME ZONE ${BUSINESS_TZ})::date = ${date}::date`,
+    );
   }
 
   const baseQuery = db
@@ -53,6 +57,7 @@ router.get("/weigh-records", async (req, res): Promise<void> => {
       rawLine: weighRecordsTable.rawLine,
       syncStatus: weighRecordsTable.syncStatus,
       createdAt: weighRecordsTable.createdAt,
+      editedAt: weighRecordsTable.editedAt,
     })
     .from(weighRecordsTable)
     .leftJoin(workersTable, eq(weighRecordsTable.workerId, workersTable.id))
@@ -113,6 +118,48 @@ router.post("/weigh-records", async (req, res): Promise<void> => {
   res.status(201).json({
     ...record,
     workerName: worker[0]?.name ?? record.workerId,
+  });
+});
+
+router.patch("/weigh-records/:id", async (req, res): Promise<void> => {
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const params = UpdateWeighRecordParams.safeParse({ id: parseInt(rawId, 10) });
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const body = UpdateWeighRecordBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  if (!Number.isInteger(body.data.weightGrams)) {
+    res.status(400).json({ error: "weightGrams must be an integer (whole grams)" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(weighRecordsTable)
+    .set({
+      weightGrams: body.data.weightGrams,
+      editedAt: new Date(),
+    })
+    .where(eq(weighRecordsTable.id, params.data.id))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Record not found" });
+    return;
+  }
+
+  const [worker] = await db
+    .select()
+    .from(workersTable)
+    .where(eq(workersTable.id, updated.workerId));
+
+  res.json({
+    ...updated,
+    workerName: worker?.name ?? updated.workerId,
   });
 });
 

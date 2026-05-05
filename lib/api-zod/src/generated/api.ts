@@ -93,6 +93,7 @@ export const ListWeighRecordsResponseItem = zod.object({
   rawLine: zod.string(),
   syncStatus: zod.string(),
   createdAt: zod.date(),
+  editedAt: zod.date().nullish(),
 });
 export const ListWeighRecordsResponse = zod.array(ListWeighRecordsResponseItem);
 
@@ -106,6 +107,37 @@ export const CreateWeighRecordBody = zod.object({
   unit: zod.string(),
   scaleId: zod.string(),
   rawLine: zod.string(),
+});
+
+/**
+ * @summary Update a weigh record (e.g. correct the weight)
+ */
+export const UpdateWeighRecordParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const updateWeighRecordBodyWeightGramsMin = 50;
+export const updateWeighRecordBodyWeightGramsMax = 10000;
+
+export const UpdateWeighRecordBody = zod.object({
+  weightGrams: zod
+    .number()
+    .min(updateWeighRecordBodyWeightGramsMin)
+    .max(updateWeighRecordBodyWeightGramsMax),
+});
+
+export const UpdateWeighRecordResponse = zod.object({
+  id: zod.number(),
+  workerId: zod.string(),
+  workerName: zod.string(),
+  timestamp: zod.date(),
+  weightGrams: zod.number(),
+  unit: zod.string(),
+  scaleId: zod.string(),
+  rawLine: zod.string(),
+  syncStatus: zod.string(),
+  createdAt: zod.date(),
+  editedAt: zod.date().nullish(),
 });
 
 /**

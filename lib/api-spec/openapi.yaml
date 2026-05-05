@@ -204,6 +204,41 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /weigh-records/{id}:
+    patch:
+      operationId: updateWeighRecord
+      tags: [weigh-records]
+      summary: Update a weigh record (e.g. correct the weight)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWeighRecordBody"
+      responses:
+        "200":
+          description: Updated record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeighRecord"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Record not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       operationId: deleteWeighRecord
       tags: [weigh-records]
@@ -549,6 +584,9 @@ components:
         createdAt:
           type: string
           format: date-time
+        editedAt:
+          type: ["string", "null"]
+          format: date-time
       required:
         - id
         - workerId
@@ -583,6 +621,16 @@ components:
         - unit
         - scaleId
         - rawLine
+
+    UpdateWeighRecordBody:
+      type: object
+      properties:
+        weightGrams:
+          type: integer
+          minimum: 50
+          maximum: 10000
+      required:
+        - weightGrams
 
     WorkerDailyStats:
       type: object

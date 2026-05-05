@@ -42,6 +42,8 @@ export interface WeighRecord {
   rawLine: string;
   syncStatus: string;
   createdAt: string;
+  /** @nullable */
+  editedAt?: string | null;
 }
 
 export interface CreateWeighRecordBody {
@@ -51,6 +53,14 @@ export interface CreateWeighRecordBody {
   unit: string;
   scaleId: string;
   rawLine: string;
+}
+
+export interface UpdateWeighRecordBody {
+  /**
+   * @minimum 50
+   * @maximum 10000
+   */
+  weightGrams: number;
 }
 
 export interface WorkerDailyStats {

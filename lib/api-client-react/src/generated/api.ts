@@ -31,6 +31,7 @@ import type {
   HealthStatus,
   ListAttendanceParams,
   ListWeighRecordsParams,
+  UpdateWeighRecordBody,
   UpdateWorkerBody,
   WeighRecord,
   Worker,
@@ -717,6 +718,93 @@ export const useCreateWeighRecord = <
   TContext
 > => {
   return useMutation(getCreateWeighRecordMutationOptions(options));
+};
+
+/**
+ * @summary Update a weigh record (e.g. correct the weight)
+ */
+export const getUpdateWeighRecordUrl = (id: number) => {
+  return `/api/weigh-records/${id}`;
+};
+
+export const updateWeighRecord = async (
+  id: number,
+  updateWeighRecordBody: UpdateWeighRecordBody,
+  options?: RequestInit,
+): Promise<WeighRecord> => {
+  return customFetch<WeighRecord>(getUpdateWeighRecordUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateWeighRecordBody),
+  });
+};
+
+export const getUpdateWeighRecordMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateWeighRecord>>,
+    TError,
+    { id: number; data: BodyType<UpdateWeighRecordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateWeighRecord>>,
+  TError,
+  { id: number; data: BodyType<UpdateWeighRecordBody> },
+  TContext
+> => {
+  const mutationKey = ["updateWeighRecord"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateWeighRecord>>,
+    { id: number; data: BodyType<UpdateWeighRecordBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateWeighRecord(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateWeighRecordMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateWeighRecord>>
+>;
+export type UpdateWeighRecordMutationBody = BodyType<UpdateWeighRecordBody>;
+export type UpdateWeighRecordMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update a weigh record (e.g. correct the weight)
+ */
+export const useUpdateWeighRecord = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateWeighRecord>>,
+    TError,
+    { id: number; data: BodyType<UpdateWeighRecordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateWeighRecord>>,
+  TError,
+  { id: number; data: BodyType<UpdateWeighRecordBody> },
+  TContext
+> => {
+  return useMutation(getUpdateWeighRecordMutationOptions(options));
 };
 
 /**
