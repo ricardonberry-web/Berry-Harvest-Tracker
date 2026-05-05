@@ -7,10 +7,10 @@ import {
   useDeleteWorker,
   useGetWorkerTimesheet,
 } from "@workspace/api-client-react";
-import { Users, Plus, QrCode, Search, UserCheck, Clock, Download, X, Calendar as CalendarIcon, Euro, Pencil, Trash2, AlertTriangle } from "lucide-react";
+import { Users, Plus, QrCode, Search, UserCheck, Clock, Download, X, Calendar as CalendarIcon, Euro, Pencil, Trash2, AlertTriangle, Power, PowerOff } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
-import { getListWorkersQueryKey } from "@workspace/api-client-react";
+import { getListWorkersQueryKey, getListAttendanceQueryKey } from "@workspace/api-client-react";
 import { format, subDays } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -24,16 +24,48 @@ type WorkerRow = { id: string; name: string; active: boolean };
 
 export default function WorkersPage() {
   const [search, setSearch] = useState("");
+  const [showInactive, setShowInactive] = useState(true);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedQR, setSelectedQR] = useState<{id: string, name: string} | null>(null);
   const [selectedTimesheet, setSelectedTimesheet] = useState<{id: string, name: string} | null>(null);
   const [selectedEdit, setSelectedEdit] = useState<WorkerRow | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const updateWorker = useUpdateWorker();
 
   const { data: workers = [], isLoading } = useListWorkers();
-  const filteredWorkers = workers.filter(w =>
-    w.name.toLowerCase().includes(search.toLowerCase()) ||
-    w.id.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredWorkers = workers.filter(w => {
+    if (!showInactive && !w.active) return false;
+    return (
+      w.name.toLowerCase().includes(search.toLowerCase()) ||
+      w.id.toLowerCase().includes(search.toLowerCase())
+    );
+  });
+
+  const toggleActive = async (w: { id: string; name: string; active: boolean }) => {
+    const willDeactivate = w.active;
+    if (willDeactivate && !window.confirm(
+      `Desativar "${w.name}"?\n\nDeixará de aparecer em Entradas/Saídas, mas o histórico de pesagens é mantido.`
+    )) return;
+    setTogglingId(w.id);
+    try {
+      await updateWorker.mutateAsync({ id: w.id, data: { active: !w.active } });
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: getListWorkersQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: getListAttendanceQueryKey() }),
+      ]);
+      toast({
+        title: willDeactivate ? "Trabalhador desativado" : "Trabalhador ativado",
+        description: w.name,
+      });
+    } catch {
+      toast({ title: "Erro ao atualizar", variant: "destructive" });
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   return (
     <Layout>
@@ -55,18 +87,35 @@ export default function WorkersPage() {
           </button>
         </div>
 
-        {/* Search */}
-        <div className="relative">
-          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-            <Search className="w-5 h-5 text-muted-foreground" />
+        {/* Search + filter */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+              <Search className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <input
+              type="text"
+              placeholder="Pesquisar por nome ou ID..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-card border-2 border-border rounded-xl pl-12 pr-4 py-4 text-foreground font-medium focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all shadow-sm"
+            />
           </div>
-          <input
-            type="text"
-            placeholder="Pesquisar por nome ou ID..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-card border-2 border-border rounded-xl pl-12 pr-4 py-4 text-foreground font-medium focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all shadow-sm"
-          />
+          <button
+            type="button"
+            onClick={() => setShowInactive(v => !v)}
+            className={`flex items-center justify-center gap-2 px-4 py-4 rounded-xl border-2 font-bold text-sm transition-all shadow-sm ${
+              showInactive
+                ? "bg-card border-border text-foreground hover:bg-muted/50"
+                : "bg-success/10 border-success/30 text-success hover:bg-success/20"
+            }`}
+            title={showInactive ? "A mostrar trabalhadores inativos" : "A esconder inativos"}
+            data-testid="button-filter-inactive"
+            aria-pressed={!showInactive}
+          >
+            {showInactive ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
+            {showInactive ? "Mostrar todos" : "Só ativos"}
+          </button>
         </div>
 
         {/* Grid */}
@@ -77,25 +126,53 @@ export default function WorkersPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredWorkers.map(worker => (
-              <div key={worker.id} className={`bg-card border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow group flex flex-col ${worker.active ? 'border-border' : 'border-border opacity-70'}`}>
-                <div className="flex justify-between items-start mb-4">
+              <div
+                key={worker.id}
+                className={`bg-card border rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow group flex flex-col ${
+                  worker.active ? "border-border" : "border-destructive/30 bg-muted/20 opacity-80"
+                }`}
+                data-testid={`worker-card-${worker.id}`}
+              >
+                <div className="flex justify-between items-start mb-4 gap-2">
                   <div className="min-w-0">
-                    <h3 className="font-bold text-lg text-foreground truncate" data-testid={`text-worker-name-${worker.id}`}>{worker.name}</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className={`font-bold text-lg truncate ${worker.active ? "text-foreground" : "text-muted-foreground line-through"}`} data-testid={`text-worker-name-${worker.id}`}>
+                        {worker.name}
+                      </h3>
+                      {!worker.active && (
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/30">
+                          Inativo
+                        </span>
+                      )}
+                    </div>
                     <span className="inline-flex mt-1 items-center gap-1 bg-muted px-2 py-1 rounded text-xs font-mono font-medium text-muted-foreground">
                       <UserCheck className="w-3 h-3" /> {worker.id}
                     </span>
-                    {!worker.active && (
-                      <span className="inline-block ml-2 mt-1 text-[10px] font-bold uppercase tracking-wider text-destructive">Inactivo</span>
-                    )}
                   </div>
-                  <button
-                    onClick={() => setSelectedEdit({ id: worker.id, name: worker.name, active: worker.active })}
-                    className="p-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
-                    title="Editar trabalhador"
-                    data-testid={`button-edit-worker-${worker.id}`}
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => toggleActive({ id: worker.id, name: worker.name, active: worker.active })}
+                      disabled={togglingId === worker.id}
+                      className={`p-2 rounded-lg transition-colors ${
+                        worker.active
+                          ? "text-success hover:bg-success/10"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      } disabled:opacity-50`}
+                      title={worker.active ? "Desativar trabalhador" : "Ativar trabalhador"}
+                      data-testid={`button-toggle-active-${worker.id}`}
+                      aria-pressed={worker.active}
+                    >
+                      {worker.active ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
+                    </button>
+                    <button
+                      onClick={() => setSelectedEdit({ id: worker.id, name: worker.name, active: worker.active })}
+                      className="p-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                      title="Editar trabalhador"
+                      data-testid={`button-edit-worker-${worker.id}`}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-auto pt-4 grid grid-cols-2 gap-2">
@@ -127,6 +204,12 @@ export default function WorkersPage() {
         <TimesheetModal
           worker={selectedTimesheet}
           onClose={() => setSelectedTimesheet(null)}
+        />
+      )}
+      {selectedEdit && (
+        <EditWorkerModal
+          worker={selectedEdit}
+          onClose={() => setSelectedEdit(null)}
         />
       )}
     </Layout>
@@ -187,6 +270,151 @@ function AddWorkerModal({ onClose }: { onClose: () => void }) {
               className="flex-1 py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/25 hover:shadow-primary/40 disabled:opacity-50"
             >
               {createWorker.isPending ? "A guardar..." : "Guardar"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function EditWorkerModal({ worker, onClose }: { worker: WorkerRow; onClose: () => void }) {
+  const [name, setName] = useState(worker.name);
+  const [active, setActive] = useState(worker.active);
+  const updateWorker = useUpdateWorker();
+  const deleteWorker = useDeleteWorker();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const dirty = name.trim() !== worker.name || active !== worker.active;
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (worker.active && !active && !window.confirm(
+      `Desativar "${worker.name}"?\n\nDeixará de aparecer em Entradas/Saídas e não pode pesar. O histórico é mantido.`
+    )) return;
+    try {
+      await updateWorker.mutateAsync({
+        id: worker.id,
+        data: { name: trimmed, active },
+      });
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: getListWorkersQueryKey() }),
+        queryClient.invalidateQueries({ queryKey: getListAttendanceQueryKey() }),
+      ]);
+      toast({ title: "Trabalhador atualizado", description: trimmed });
+      onClose();
+    } catch {
+      toast({ title: "Erro ao guardar", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm(
+      `Apagar definitivamente "${worker.name}"?\n\nSe tem pesagens registadas, prefira DESATIVAR para preservar o histórico.`
+    )) return;
+    try {
+      await deleteWorker.mutateAsync({ id: worker.id });
+      await queryClient.invalidateQueries({ queryKey: getListWorkersQueryKey() });
+      toast({ title: "Trabalhador apagado", description: worker.name });
+      onClose();
+    } catch {
+      toast({
+        title: "Erro ao apagar",
+        description: "Tem pesagens associadas? Tente desativar em vez de apagar.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card w-full max-w-md rounded-2xl shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-display font-bold">Editar Trabalhador</h2>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-muted text-muted-foreground">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSave} className="space-y-4">
+          <div>
+            <label className="block text-sm font-bold text-muted-foreground mb-1">ID</label>
+            <input
+              value={worker.id}
+              disabled
+              className="w-full bg-muted/40 border-2 border-border rounded-xl px-4 py-3 font-mono uppercase text-muted-foreground cursor-not-allowed"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-muted-foreground mb-1">Nome Completo</label>
+            <input
+              required
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:outline-none"
+              data-testid="input-edit-worker-name"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setActive(v => !v)}
+            className={`w-full flex items-center justify-between gap-3 p-4 rounded-xl border-2 transition-all ${
+              active
+                ? "bg-success/10 border-success/30 text-success"
+                : "bg-destructive/10 border-destructive/30 text-destructive"
+            }`}
+            data-testid="button-modal-toggle-active"
+            aria-pressed={active}
+          >
+            <div className="flex items-center gap-3 text-left">
+              {active ? <Power className="w-5 h-5 shrink-0" /> : <PowerOff className="w-5 h-5 shrink-0" />}
+              <div>
+                <p className="font-bold">{active ? "Ativo" : "Inativo"}</p>
+                <p className="text-xs opacity-80 font-medium">
+                  {active
+                    ? "Aparece em Entradas/Saídas e pode pesar."
+                    : "Não aparece em Entradas/Saídas. Histórico mantido."}
+                </p>
+              </div>
+            </div>
+            <span className={`shrink-0 w-12 h-6 rounded-full p-0.5 transition-colors ${
+              active ? "bg-success" : "bg-muted"
+            }`}>
+              <span className={`block w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                active ? "translate-x-6" : "translate-x-0"
+              }`} />
+            </span>
+          </button>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleteWorker.isPending}
+              className="px-4 py-3 bg-destructive/10 text-destructive font-bold rounded-xl hover:bg-destructive/20 disabled:opacity-50 flex items-center gap-2"
+              data-testid="button-delete-worker"
+              title="Apagar permanentemente"
+            >
+              <Trash2 className="w-4 h-4" />
+              Apagar
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3 bg-muted text-muted-foreground font-bold rounded-xl hover:bg-muted/80"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={updateWorker.isPending || !dirty || !name.trim()}
+              className="flex-1 py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/25 hover:shadow-primary/40 disabled:opacity-50"
+              data-testid="button-save-worker"
+            >
+              {updateWorker.isPending ? "A guardar..." : "Guardar"}
             </button>
           </div>
         </form>

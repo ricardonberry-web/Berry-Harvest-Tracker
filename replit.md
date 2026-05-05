@@ -50,13 +50,13 @@ PWA para Android (Chrome) que regista pesagens de caixas de mirtilo em campo. Co
 | PATCH | `/api/workers/:id` | Actualiza trabalhador |
 | DELETE | `/api/workers/:id` | Remove trabalhador |
 | GET | `/api/weigh-records` | Lista pesagens (filtros: workerId, date, limit). `date` é interpretado em fuso horário **Europe/Lisbon**. |
-| POST | `/api/weigh-records` | Regista pesagem (rejeita 403 se trabalhador sem entrada) |
+| POST | `/api/weigh-records` | Regista pesagem (rejeita 403 se trabalhador inativo ou sem entrada) |
 | PATCH | `/api/weigh-records/:id` | Corrige peso (50–10000 g, inteiro). Marca `editedAt`. |
 | DELETE | `/api/weigh-records/:id` | Remove pesagem |
-| GET | `/api/attendance?date=` | Lista entradas/saídas de um dia (default: hoje) |
-| POST | `/api/attendance/check-in` | Entrada de um trabalhador |
-| POST | `/api/attendance/check-out` | Saída de um trabalhador |
-| POST | `/api/attendance/check-in-all` | Entrada em massa (body: `{workerIds?: string[]}` — opcional; se omitido aplica a todos os activos; reabre quem já tinha saído) |
+| GET | `/api/attendance?date=` | Lista entradas/saídas de um dia (default: hoje). Mostra apenas trabalhadores **ativos**, mais inativos com linha aberta nesse dia (para permitir fechar turno após desativação). |
+| POST | `/api/attendance/check-in` | Entrada de um trabalhador (rejeita 403 se inativo) |
+| POST | `/api/attendance/check-out` | Saída de um trabalhador (permitida mesmo inativo se já houver linha aberta) |
+| POST | `/api/attendance/check-in-all` | Entrada em massa (body: `{workerIds?: string[]}` — opcional; ignora inativos; se omitido aplica a todos os activos; reabre quem já tinha saído) |
 | POST | `/api/attendance/check-out-all` | Saída em massa (body: `{workerIds?: string[]}` — opcional; se omitido aplica a todos os que ainda estão no terreno) |
 | GET | `/api/reports/daily?date=YYYY-MM-DD` | Ranking diário por kg |
 | GET | `/api/reports/export?date=YYYY-MM-DD` | Exporta CSV |
@@ -68,7 +68,7 @@ PWA para Android (Chrome) que regista pesagens de caixas de mirtilo em campo. Co
 - **`/`** — Pesagem: identificação do trabalhador (QR ou manual), modos Balança e Manual, botão de registo, histórico do dia. Bloqueia se o trabalhador não tem entrada nesse dia.
 - **`/attendance`** — Entradas/Saídas diárias: caixa de selecção por trabalhador + barra fixa com 2 botões "Entrada (N)" e "Saída (N)" que aplicam a acção apenas aos seleccionados. Mostra hora de entrada, saída e total trabalhado.
 - **`/ranking`** — Ranking diário: filtro por data, ordenação por kg/kg-h/caixas/horas, opção "só com horas registadas", colunas Horas e **Kg/h** (calculados a partir de check-in/check-out reais), kg/h da equipa, exportação CSV.
-- **`/workers`** — Gestão de trabalhadores: listagem, pesquisa, criação, badges QR e **Folha de Horas** (modal por trabalhador com filtro de datas, valor/hora editável, cálculo automático do valor a pagar e exportação CSV).
+- **`/workers`** — Gestão de trabalhadores: listagem, pesquisa, criação, badges QR e **Folha de Horas** (modal por trabalhador com filtro de datas, valor/hora editável, cálculo automático do valor a pagar e exportação CSV). Botão Power por cartão para **ativar/desativar** (confirma na desativação) + filtro "Mostrar todos / Só ativos". Modal de edição com nome, switch ativo/inativo e Apagar (preferir desativar para preservar histórico). Inativos: nome riscado, pill vermelha "Inativo".
 
 ## Componentes-chave
 
@@ -103,6 +103,7 @@ O botão "REGISTAR" usa a fonte activa. O histórico do dia mostra a origem de c
 - Pesagens só são aceites se houver entrada activa (sem saída) nesse dia — caso contrário API devolve 403.
 - Botões "Entrada — Todos" e "Saída — Todos" para arranque e fim de dia em massa.
 - Horas trabalhadas calculadas como `(checkOutAt − checkInAt)` em horas decimais.
+- **Trabalhadores inativos** não aparecem na lista (e API rejeita check-in/pesagem). Excepção: se já tinham linha aberta para o dia quando foram desativados, continuam visíveis para que o turno possa ser fechado normalmente.
 
 ## Anti-error UX
 

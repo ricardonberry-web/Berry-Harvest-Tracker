@@ -43,19 +43,30 @@ function serialiseEntry(row: AttendanceRow) {
 }
 
 async function loadEntriesForDate(date: string) {
-  const workers = await db
+  const activeWorkers = await db
     .select()
     .from(workersTable)
-    .orderBy(workersTable.name);
+    .where(eq(workersTable.active, true));
 
   const attendance = await db
     .select()
     .from(attendanceTable)
     .where(eq(attendanceTable.date, date));
 
+  // Also surface inactive workers that already have an attendance row for the
+  // date, so an open shift can still be closed after deactivation.
+  const activeIds = new Set(activeWorkers.map((w) => w.id));
+  const orphanIds = attendance.map((a) => a.workerId).filter((id) => !activeIds.has(id));
+  const orphanWorkers = orphanIds.length
+    ? await db.select().from(workersTable).where(inArray(workersTable.id, orphanIds))
+    : [];
+
+  const allWorkers = [...activeWorkers, ...orphanWorkers].sort((a, b) =>
+    a.name.localeCompare(b.name, "pt"),
+  );
   const byWorker = new Map(attendance.map((a) => [a.workerId, a]));
 
-  return workers.map((w) =>
+  return allWorkers.map((w) =>
     serialiseEntry({
       workerId: w.id,
       workerName: w.name,
@@ -87,6 +98,10 @@ router.post("/attendance/check-in", async (req, res): Promise<void> => {
     .where(eq(workersTable.id, workerId));
   if (!worker) {
     res.status(404).json({ error: "Worker not found" });
+    return;
+  }
+  if (!worker.active) {
+    res.status(403).json({ error: "Trabalhador inativo. Reative-o em Equipa para registar entrada." });
     return;
   }
 
@@ -139,6 +154,8 @@ router.post("/attendance/check-out", async (req, res): Promise<void> => {
     return;
   }
 
+  // Allow check-out for inactive workers IF they already have an open
+  // attendance row for the date — otherwise we'd strand their shift.
   const existing = await db
     .select()
     .from(attendanceTable)
@@ -177,7 +194,10 @@ router.post("/attendance/check-in-all", async (req, res): Promise<void> => {
   const explicitIds = parseWorkerIds(req.body?.workerIds);
 
   const targetWorkers = explicitIds
-    ? await db.select().from(workersTable).where(inArray(workersTable.id, explicitIds))
+    ? await db
+        .select()
+        .from(workersTable)
+        .where(and(inArray(workersTable.id, explicitIds), eq(workersTable.active, true)))
     : await db.select().from(workersTable).where(eq(workersTable.active, true));
 
   if (targetWorkers.length === 0) {

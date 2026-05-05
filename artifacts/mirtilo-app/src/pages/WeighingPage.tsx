@@ -149,6 +149,16 @@ export default function WeighingPage() {
 
   const handleQRScan = useCallback((code: string) => {
     const worker = workers.find(w => w.id === code.trim().toUpperCase());
+    if (worker && !worker.active) {
+      beep("error");
+      toast({
+        title: "Trabalhador inativo",
+        description: `${worker.name} (${worker.id}) está inativo. Reative-o em Equipa.`,
+        variant: "destructive",
+      });
+      setTimeout(() => startScannerRef.current(), 1500);
+      return;
+    }
     if (worker) {
       beep("success");
       setActiveWorkerId(worker.id);
@@ -186,6 +196,15 @@ export default function WeighingPage() {
     const id = manualIdInput.trim().toUpperCase();
     if (!id) return;
     const worker = workers.find(w => w.id === id);
+    if (worker && !worker.active) {
+      beep("error");
+      toast({
+        title: "Trabalhador inativo",
+        description: `${worker.name} (${worker.id}) está inativo. Reative-o em Equipa.`,
+        variant: "destructive",
+      });
+      return;
+    }
     if (worker) {
       beep("success");
       setActiveWorkerId(worker.id);

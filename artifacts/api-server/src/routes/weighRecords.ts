@@ -98,6 +98,20 @@ router.post("/weigh-records", async (req, res): Promise<void> => {
   const { workerId, weightGrams, unit, scaleId, rawLine, timestamp } = parsed.data;
   const qualityIssues = sanitizeIssues((parsed.data as { qualityIssues?: unknown }).qualityIssues);
 
+  // Reject inactive workers up-front so a stale UI can't insert orphan records
+  const [workerRow] = await db
+    .select()
+    .from(workersTable)
+    .where(eq(workersTable.id, workerId));
+  if (!workerRow) {
+    res.status(404).json({ error: "Trabalhador não encontrado." });
+    return;
+  }
+  if (!workerRow.active) {
+    res.status(403).json({ error: "Trabalhador inativo — não pode pesar." });
+    return;
+  }
+
   // Reject if worker hasn't checked in today (or has already checked out)
   const recordDate = todayISO(timestamp ? new Date(timestamp) : new Date());
   const [att] = await db
