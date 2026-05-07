@@ -14,4 +14,8 @@ export default defineConfig({
       "@": path.resolve(import.meta.dirname, "src"),
     },
   },
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+  },
 });
