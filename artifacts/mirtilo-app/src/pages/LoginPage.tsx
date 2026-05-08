@@ -1,9 +1,9 @@
 import { useState } from "react";
 
 const ACCESS_CODES: Record<string, string> = {
-  "ADMIN2025": "admin",
-  "OPERADOR1": "operador1",
-  "OPERADOR2": "operador2",
+  "ADMIN26": "admin",
+  "DML26": "operador1",
+  "NF26": "operador2",
 };
 
 export default function LoginPage({ onLogin }: { onLogin: (role: string) => void }) {
