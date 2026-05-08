@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabase } from "../../../lib/supabase";
 
 const ACCESS_CODES: Record<string, string> = {
   "ADMIN26": "admin",
@@ -10,9 +11,10 @@ export default function LoginPage({ onLogin }: { onLogin: (role: string) => void
   const [code, setCode] = useState("");
   const [error, setError] = useState(false);
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const role = ACCESS_CODES[code.toUpperCase()];
     if (role) {
+      await supabase.from("access_logs").insert({ role });
       localStorage.setItem("access_role", role);
       onLogin(role);
     } else {
