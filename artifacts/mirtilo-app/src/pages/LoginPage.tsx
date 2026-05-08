@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "../../../lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 const ACCESS_CODES: Record<string, string> = {
   "ADMIN26": "admin",
