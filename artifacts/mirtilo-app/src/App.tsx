@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChecklistModal } from "@/components/ChecklistModal";
 import { ScaleProvider } from "@/hooks/use-scale";
-
+import LoginPage from "@/pages/LoginPage";
 // Pages
 import WeighingPage from "@/pages/WeighingPage";
 import RankingPage from "@/pages/RankingPage";
@@ -34,12 +35,19 @@ function Router() {
 }
 
 function App() {
+  const [role, setRole] = useState<string | null>(
+    localStorage.getItem("access_role")
+  );
+
+  if (!role) {
+    return <LoginPage onLogin={setRole} />;
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ScaleProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            {/* Top level checklist modal forces validation on startup */}
             <ChecklistModal />
             <Router />
           </WouterRouter>
