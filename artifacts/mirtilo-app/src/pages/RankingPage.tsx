@@ -35,7 +35,11 @@ import { useMemo, useState } from "react";
 import { Layout } from "@/components/Layout";
 import { useGetDailyReport, useListWeighRecords, useUpdateWeighRecord, useDeleteWeighRecord } from "@workspace/api-client-react";
 import { Trophy, Download, Calendar as CalendarIcon, Medal, Filter, ListOrdered, Clock, AlertTriangle, Pencil, Trash2 } from "lucide-react";
-import { format } from "date-fns";
+  import { format } from "date-fns";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+  import { useQueryClient } from "@tanstack/react-query";
+  import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -68,7 +72,12 @@ export default function RankingPage() {
   const [workerFilter, setWorkerFilter] = useState("");
   const [editingRecord, setEditingRecord] = useState<{ id: number; weightGrams: number } | null>(null);
   const [editWeight, setEditWeight] = useState("");
-
+  const [editingRecord, setEditingRecord] = useState<{ id: number; weightGrams: number } | null>(null);
+  const [editWeight, setEditWeight] = useState("");
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const updateRecord = useUpdateWeighRecord();
+  const deleteRecord = useDeleteWeighRecord();
   const { data: report, isLoading } = useGetDailyReport(
     { date },
     { query: { keepPreviousData: true } },
@@ -133,7 +142,38 @@ export default function RankingPage() {
     [report],
   );
   const teamKgPorHora = teamHours > 0 ? (report?.totalKg ?? 0) / teamHours : null;
+  const handleEdit = (id: number, weightGrams: number) => {
+    setEditingRecord({ id, weightGrams });
+    setEditWeight(String(weightGrams));
+  };
 
+  const handleEditSave = async () => {
+    if (!editingRecord) return;
+    const newWeight = parseInt(editWeight, 10);
+    if (isNaN(newWeight) || newWeight <= 0) {
+      toast({ title: "Peso inválido", variant: "destructive" });
+      return;
+    }
+    try {
+      await updateRecord.mutateAsync({ id: editingRecord.id, data: { weightGrams: newWeight } });
+      await queryClient.invalidateQueries();
+      toast({ title: "Pesagem atualizada" });
+      setEditingRecord(null);
+    } catch {
+      toast({ title: "Erro ao atualizar", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm("Apagar esta pesagem?")) return;
+    try {
+      await deleteRecord.mutateAsync({ id });
+      await queryClient.invalidateQueries();
+      toast({ title: "Pesagem apagada" });
+    } catch {
+      toast({ title: "Erro ao apagar", variant: "destructive" });
+    }
+  };
   const handleExport = () => {
     window.location.href = `/api/reports/export?date=${date}`;
   };
@@ -397,6 +437,7 @@ export default function RankingPage() {
                     <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground text-right">Peso</th>
                     <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Origem</th>
                     <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground text-center">Ações</th>
+                    <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground text-center">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -423,7 +464,24 @@ export default function RankingPage() {
                             </div>
                           )}
                         </td>
-                        <td className="p-3 hidden sm:table-cell">
+                        <td className="p-3 hidden sm:table-cell"><td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => handleEdit(r.id, r.weightGrams)}
+                                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                                title="Editar"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(r.id)}
+                                className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
+                                title="Apagar"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
                           <span className={`text-xs font-bold px-2 py-1 rounded-full ${r.scaleId?.includes("MANUAL") ? "text-orange-700 bg-orange-100 dark:bg-orange-900/40 dark:text-orange-300" : "text-green-700 bg-green-100 dark:bg-green-900/40 dark:text-green-300"}`}>
                             {r.scaleId?.includes("MANUAL") ? "✍ manual" : "⚖ balança"}
                           </span>
