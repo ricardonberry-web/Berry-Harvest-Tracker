@@ -742,6 +742,16 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
+                    <td className="p-3 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <button onClick={() => handleEditDay(d)} className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors" title="Editar">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleDeleteDay(d.date)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors" title="Apagar">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
