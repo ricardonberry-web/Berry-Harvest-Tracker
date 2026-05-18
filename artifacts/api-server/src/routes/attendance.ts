@@ -303,6 +303,5 @@ router.delete("/attendance/:workerId/:date", async (req, res): Promise<void> => 
   await db.delete(attendanceTable).where(eq(attendanceTable.id, existing[0].id));
   res.sendStatus(204);
 });
-});
 
 export default router;
