@@ -423,8 +423,7 @@ function EditWorkerModal({ worker, onClose }: { worker: WorkerRow; onClose: () =
   );
 }
 
-function QRModal({ data, onClose }: { data: { id: string, name: string }, onClose: () => void }) {
-  const handleDownload = () => {
+function QRModal({ data, onClose }) {
   const handleDownload = () => {
     const svg = document.getElementById("qr-svg");
     if (!svg) return;
@@ -440,13 +439,12 @@ function QRModal({ data, onClose }: { data: { id: string, name: string }, onClos
     img.onload = () => {
       ctx.drawImage(img, 0, 0, 200, 200);
       const link = document.createElement("a");
-      link.download = `qr-${data.id}.png`;
+      link.download = "qr-" + data.id + ".png";
       link.href = canvas.toDataURL("image/png");
       link.click();
     };
     img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData)));
   };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md" onClick={onClose}>
       <div className="bg-white text-black w-full max-w-sm rounded-3xl p-8 text-center flex flex-col items-center" onClick={e => e.stopPropagation()}>
