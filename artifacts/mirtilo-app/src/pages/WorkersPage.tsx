@@ -424,19 +424,51 @@ function EditWorkerModal({ worker, onClose }: { worker: WorkerRow; onClose: () =
 }
 
 function QRModal({ data, onClose }: { data: { id: string, name: string }, onClose: () => void }) {
+  const handleDownload = () => {
+    const svg = document.getElementById("qr-svg");
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement("canvas");
+    canvas.width = 400;
+    canvas.height = 480;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, 400, 480);
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 100, 120, 200, 200);
+      ctx.fillStyle = "black";
+      ctx.font = "bold 24px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(data.name, 200, 60);
+      ctx.font = "18px monospace";
+      ctx.fillStyle = "#666";
+      ctx.fillText(data.id, 200, 95);
+      const link = document.createElement("a");
+      link.download = `badge-${data.id}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    };
+    img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData)));
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md" onClick={onClose}>
       <div className="bg-white text-black w-full max-w-sm rounded-3xl p-8 text-center flex flex-col items-center" onClick={e => e.stopPropagation()}>
         <h2 className="text-3xl font-display font-black mb-1">{data.name}</h2>
         <p className="text-gray-500 font-mono text-lg mb-8 tracking-widest">{data.id}</p>
-
         <div className="bg-white p-4 border-4 border-gray-100 rounded-2xl mb-8">
-          <QRCodeSVG value={data.id} size={200} level="H" />
+          <QRCodeSVG id="qr-svg" value={data.id} size={200} level="H" />
         </div>
-
-        <button onClick={onClose} className="w-full py-4 bg-gray-100 text-gray-800 font-bold rounded-xl hover:bg-gray-200 transition-colors">
-          Fechar
-        </button>
+        <div className="flex gap-3 w-full">
+          <button onClick={onClose} className="flex-1 py-4 bg-gray-100 text-gray-800 font-bold rounded-xl hover:bg-gray-200 transition-colors">
+            Fechar
+          </button>
+          <button onClick={handleDownload} className="flex-1 py-4 bg-black text-white font-bold rounded-xl hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
+            <Download className="w-4 h-4" /> Exportar
+          </button>
+        </div>
       </div>
     </div>
   );
