@@ -490,6 +490,47 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
   const [from, setFrom] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
   const [to, setTo] = useState(format(new Date(), "yyyy-MM-dd"));
   const [rateInput, setRateInput] = useState("");
+  const [editingDay, setEditingDay] = useState(null);
+  const [editCheckIn, setEditCheckIn] = useState("");
+  const [editCheckOut, setEditCheckOut] = useState("");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const handleEditDay = (d) => {
+    setEditingDay(d);
+    setEditCheckIn(d.checkInAt ? format(new Date(d.checkInAt), "HH:mm") : "");
+    setEditCheckOut(d.checkOutAt ? format(new Date(d.checkOutAt), "HH:mm") : "");
+  };
+
+  const handleEditSave = async () => {
+    if (!editingDay) return;
+    try {
+      await fetch(import.meta.env.VITE_API_URL + "/api/attendance/" + worker.id + "/" + editingDay.date, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          checkInAt: editCheckIn ? editingDay.date + "T" + editCheckIn + ":00" : null,
+          checkOutAt: editCheckOut ? editingDay.date + "T" + editCheckOut + ":00" : null,
+        }),
+      });
+      await queryClient.invalidateQueries();
+      toast({ title: "Registo atualizado" });
+      setEditingDay(null);
+    } catch {
+      toast({ title: "Erro ao atualizar", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteDay = async (date) => {
+    if (!window.confirm("Apagar registo deste dia?")) return;
+    try {
+      await fetch(import.meta.env.VITE_API_URL + "/api/attendance/" + worker.id + "/" + date, { method: "DELETE" });
+      await queryClient.invalidateQueries();
+      toast({ title: "Registo apagado" });
+    } catch {
+      toast({ title: "Erro ao apagar", variant: "destructive" });
+    }
+  };
 
   const hourlyRate = useMemo(() => {
     const n = Number(rateInput.replace(",", "."));
@@ -512,6 +553,29 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
     setFrom(format(subDays(new Date(), days), "yyyy-MM-dd"));
     setTo(format(new Date(), "yyyy-MM-dd"));
   };
+
+
+  if (editingDay) return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-card w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4">
+        <h2 className="text-lg font-bold">Editar Registo</h2>
+        <div>
+          <label className="text-sm font-medium text-muted-foreground">Entrada</label>
+          <input type="time" value={editCheckIn} onChange={e => setEditCheckIn(e.target.value)}
+            className="w-full mt-1 border border-border rounded-lg px-4 py-2 font-mono focus:outline-none focus:border-primary" />
+        </div>
+        <div>
+          <label className="text-sm font-medium text-muted-foreground">Saída</label>
+          <input type="time" value={editCheckOut} onChange={e => setEditCheckOut(e.target.value)}
+            className="w-full mt-1 border border-border rounded-lg px-4 py-2 font-mono focus:outline-none focus:border-primary" />
+        </div>
+        <div className="flex gap-3">
+          <button onClick={() => setEditingDay(null)} className="flex-1 py-2 rounded-lg border border-border font-bold hover:bg-muted/50">Cancelar</button>
+          <button onClick={handleEditSave} className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground font-bold hover:opacity-90">Guardar</button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-md overflow-y-auto" onClick={onClose}>
@@ -629,6 +693,7 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
                     <AlertTriangle className="w-3.5 h-3.5 inline" /> Ocor.
                   </th>
                   <th className="p-3 font-bold text-xs uppercase tracking-wider text-primary text-right">Valor (€)</th>
+                  <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground text-center">Ações</th>
                 </tr>
               </thead>
               <tbody>
