@@ -425,28 +425,22 @@ function EditWorkerModal({ worker, onClose }: { worker: WorkerRow; onClose: () =
 
 function QRModal({ data, onClose }: { data: { id: string, name: string }, onClose: () => void }) {
   const handleDownload = () => {
+  const handleDownload = () => {
     const svg = document.getElementById("qr-svg");
     if (!svg) return;
     const svgData = new XMLSerializer().serializeToString(svg);
     const canvas = document.createElement("canvas");
-    canvas.width = 400;
-    canvas.height = 480;
+    canvas.width = 200;
+    canvas.height = 200;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.fillStyle = "white";
-    ctx.fillRect(0, 0, 400, 480);
+    ctx.fillRect(0, 0, 200, 200);
     const img = new Image();
     img.onload = () => {
-      ctx.drawImage(img, 100, 120, 200, 200);
-      ctx.fillStyle = "black";
-      ctx.font = "bold 24px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(data.name, 200, 60);
-      ctx.font = "18px monospace";
-      ctx.fillStyle = "#666";
-      ctx.fillText(data.id, 200, 95);
+      ctx.drawImage(img, 0, 0, 200, 200);
       const link = document.createElement("a");
-      link.download = `badge-${data.id}.png`;
+      link.download = `qr-${data.id}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
     };
