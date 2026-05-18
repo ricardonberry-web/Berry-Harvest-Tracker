@@ -249,4 +249,60 @@ router.post("/attendance/check-out-all", async (req, res): Promise<void> => {
   res.json(await loadEntriesForDate(date));
 });
 
+
+export default router;
+
+router.patch("/attendance/:workerId/:date", async (req, res): Promise<void> => {
+  const { workerId, date } = req.params;
+  const { checkInAt, checkOutAt } = req.body;
+
+  const existing = await db
+    .select()
+    .from(attendanceTable)
+    .where(and(eq(attendanceTable.workerId, workerId), eq(attendanceTable.date, date)));
+
+  if (existing.length === 0) {
+    res.status(404).json({ error: "Registo não encontrado" });
+    return;
+  }
+
+  const updateData: Record<string, unknown> = {};
+  if (checkInAt !== undefined) updateData.checkInAt = checkInAt ? new Date(checkInAt) : null;
+  if (checkOutAt !== undefined) updateData.checkOutAt = checkOutAt ? new Date(checkOutAt) : null;
+
+  const [updated] = await db
+    .update(attendanceTable)
+    .set(updateData)
+    .where(eq(attendanceTable.id, existing[0].id))
+    .returning();
+
+  const [worker] = await db.select().from(workersTable).where(eq(workersTable.id, workerId));
+
+  res.json(serialiseEntry({
+    workerId,
+    workerName: worker?.name ?? workerId,
+    date,
+    checkInAt: updated.checkInAt,
+    checkOutAt: updated.checkOutAt,
+  }));
+});
+
+router.delete("/attendance/:workerId/:date", async (req, res): Promise<void> => {
+  const { workerId, date } = req.params;
+
+  const existing = await db
+    .select()
+    .from(attendanceTable)
+    .where(and(eq(attendanceTable.workerId, workerId), eq(attendanceTable.date, date)));
+
+  if (existing.length === 0) {
+    res.status(404).json({ error: "Registo não encontrado" });
+    return;
+  }
+
+  await db.delete(attendanceTable).where(eq(attendanceTable.id, existing[0].id));
+  res.sendStatus(204);
+});
+});
+
 export default router;
