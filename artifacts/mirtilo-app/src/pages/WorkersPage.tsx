@@ -505,7 +505,7 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
   const handleEditSave = async () => {
     if (!editingDay) return;
     try {
-      await fetch(import.meta.env.VITE_API_URL + "/attendance/" + worker.id + "/" + editingDay.date, {
+      await fetch(import.meta.env.VITE_API_URL + "/api/attendance/" + worker.id + "/" + editingDay.date, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -524,7 +524,7 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
   const handleDeleteDay = async (date) => {
     if (!window.confirm("Apagar registo deste dia?")) return;
     try {
-      await fetch(import.meta.env.VITE_API_URL + "/attendance/" + worker.id + "/" + date, { method: "DELETE" });
+      await fetch(import.meta.env.VITE_API_URL + "/api/attendance/" + worker.id + "/" + date, { method: "DELETE" });
       await queryClient.invalidateQueries();
       toast({ title: "Registo apagado" });
     } catch {
