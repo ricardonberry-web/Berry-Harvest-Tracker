@@ -123,8 +123,13 @@ router.post("/weigh-records", async (req, res): Promise<void> => {
     return;
   }
   if (att.checkOutAt) {
-    res.status(403).json({ error: "Trabalhador já deu saída — registe nova entrada para pesar." });
-    return;
+    const checkOutTime = new Date(att.checkOutAt).getTime();
+    const now = Date.now();
+    const oneHour = 60 * 60 * 1000;
+    if (now - checkOutTime > oneHour) {
+      res.status(403).json({ error: "Trabalhador já deu saída há mais de 1 hora — registe nova entrada para pesar." });
+      return;
+    }
   }
 
   const [record] = await db
