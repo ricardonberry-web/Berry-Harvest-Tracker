@@ -175,10 +175,15 @@ router.patch("/weigh-records/:id", async (req, res): Promise<void> => {
   }
 
   const issuesProvided = (body.data as { qualityIssues?: unknown }).qualityIssues !== undefined;
+  const timestampProvided = (body.data as { timestamp?: unknown }).timestamp !== undefined;
   const setPayload: Record<string, unknown> = {
     weightGrams: body.data.weightGrams,
     editedAt: new Date(),
   };
+  if (timestampProvided) {
+    const ts = (body.data as { timestamp?: unknown }).timestamp;
+    setPayload.timestamp = ts ? new Date(ts as string) : new Date();
+  }
   if (issuesProvided) {
     setPayload.qualityIssues = sanitizeIssues((body.data as { qualityIssues?: unknown }).qualityIssues);
   }
