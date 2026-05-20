@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { QUALITY_ISSUES, QUALITY_LABELS, QUALITY_SHORT, QUALITY_CHIP_CLASS, type QualityIssue } from "@/lib/quality-issues";
 
 type SortKey = "kg" | "kgPorHora" | "caixas" | "horas";
-type Tab = "ranking" | "weighings";
+type Tab = "ranking" | "weighings" | "range";
 
 function fmtHours(h: number | null | undefined) {
   if (h === null || h === undefined) return "—";
@@ -29,6 +29,10 @@ export default function RankingPage() {
   const [workerFilter, setWorkerFilter] = useState("");
   const [editingRecord, setEditingRecord] = useState<{ id: number; weightGrams: number } | null>(null);
   const [editWeight, setEditWeight] = useState("");
+  const [rangeFrom, setRangeFrom] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [rangeTo, setRangeTo] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [rangeData, setRangeData] = useState<any>(null);
+  const [rangeLoading, setRangeLoading] = useState(false);
 
   const updateRecord = useUpdateWeighRecord();
   const deleteRecord = useDeleteWeighRecord();
@@ -76,6 +80,19 @@ export default function RankingPage() {
 
   const teamHours = useMemo(() => (report?.workers ?? []).reduce((acc, w) => acc + (w.hoursWorked ?? 0), 0), [report]);
   const teamKgPorHora = teamHours > 0 ? (report?.totalKg ?? 0) / teamHours : null;
+
+  const fetchRange = async () => {
+    setRangeLoading(true);
+    try {
+      const res = await fetch(import.meta.env.VITE_API_URL + "/api/reports/range?from=" + rangeFrom + "&to=" + rangeTo);
+      const data = await res.json();
+      setRangeData(data);
+    } catch {
+      toast({ title: "Erro ao carregar dados", variant: "destructive" });
+    } finally {
+      setRangeLoading(false);
+    }
+  };
 
   const handleExport = () => { window.location.href = `/api/reports/export?date=${date}`; };
 
@@ -156,6 +173,12 @@ export default function RankingPage() {
           </button>
           <button onClick={() => setTab("weighings")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-sm transition-colors ${tab === "weighings" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:bg-muted/50"}`}>
             <ListOrdered className="w-4 h-4" /> Pesagens do dia
+          </button>
+          <button
+            onClick={() => setTab("range")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-sm transition-colors ${tab === "range" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:bg-muted/50"}`}
+          >
+            <CalendarIcon className="w-4 h-4" /> Por Intervalo
           </button>
         </div>
 
@@ -297,6 +320,68 @@ export default function RankingPage() {
             </div>
           </>
         )}
+      </div>
+
+        {tab === "range" && (
+          <div className="space-y-4">
+            <div className="bg-card border border-border rounded-2xl p-4 flex flex-col sm:flex-row gap-4 items-end">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">De</label>
+                <input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)}
+                  className="bg-background border border-border rounded-xl px-4 py-2 font-medium focus:outline-none focus:border-primary" />
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">Até</label>
+                <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)}
+                  className="bg-background border border-border rounded-xl px-4 py-2 font-medium focus:outline-none focus:border-primary" />
+              </div>
+              <button onClick={fetchRange} disabled={rangeLoading}
+                className="bg-primary text-primary-foreground px-6 py-2 rounded-xl font-bold hover:opacity-90 disabled:opacity-50">
+                {rangeLoading ? "A carregar…" : "Ver Ranking"}
+              </button>
+            </div>
+
+            {rangeData && (
+              <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-border flex gap-4">
+                  <StatCard label="Total Colhido" value={rangeData.totalKg.toFixed(1) + " kg"} />
+                  <StatCard label="Total Caixas" value={rangeData.totalRecords.toString()} />
+                  <StatCard label="Trabalhadores" value={rangeData.workers.length.toString()} />
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-muted/50 border-b border-border">
+                        <th className="p-4 font-bold text-xs uppercase tracking-wider text-muted-foreground w-16 text-center">Rank</th>
+                        <th className="p-4 font-bold text-xs uppercase tracking-wider text-muted-foreground">Trabalhador</th>
+                        <th className="p-4 font-bold text-xs uppercase tracking-wider text-muted-foreground text-right">Caixas</th>
+                        <th className="p-4 font-bold text-xs uppercase tracking-wider text-muted-foreground text-right">Total (kg)</th>
+                        <th className="p-4 font-bold text-xs uppercase tracking-wider text-muted-foreground text-right">Méd/Cx</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rangeData.workers.map((w, i) => (
+                        <tr key={w.workerId} className="border-b border-border/50 hover:bg-muted/20">
+                          <td className="p-4 text-center">
+                            {i === 0 ? <Medal className="w-6 h-6 text-yellow-500 mx-auto" /> :
+                             i === 1 ? <Medal className="w-6 h-6 text-slate-400 mx-auto" /> :
+                             i === 2 ? <Medal className="w-6 h-6 text-amber-700 mx-auto" /> :
+                             <span className="font-bold text-muted-foreground">{i + 1}</span>}
+                          </td>
+                          <td className="p-4"><p className="font-bold">{w.workerName}</p><p className="text-xs text-muted-foreground font-mono">{w.workerId}</p></td>
+                          <td className="p-4 text-right font-medium">{w.totalCaixas}</td>
+                          <td className="p-4 text-right"><span className="bg-primary/10 text-primary px-3 py-1 rounded-lg font-bold text-lg">{w.totalKg.toFixed(2)}</span></td>
+                          <td className="p-4 text-right text-muted-foreground">{w.mediaGrPorCaixa}g</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </Layout>
   );
