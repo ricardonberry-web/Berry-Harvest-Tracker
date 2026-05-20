@@ -22,7 +22,7 @@ export default function RankingPage() {
   const queryClient = useQueryClient();
   const [dateFrom, setDateFrom] = useState(format(new Date(), "yyyy-MM-dd"));
   const [dateTo, setDateTo] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  
   const [sortKey, setSortKey] = useState<SortKey>("kg");
   const [onlyWithHours, setOnlyWithHours] = useState(false);
   const [tab, setTab] = useState<Tab>("ranking");
@@ -46,7 +46,7 @@ export default function RankingPage() {
       .then(data => { setReport(data); setIsLoading(false); })
       .catch(() => setIsLoading(false));
   }, [dateFrom, dateTo]);
-  const { data: allRecords = [], isLoading: recordsLoading } = useListWeighRecords({ date }, { query: { keepPreviousData: true } });
+  const { data: allRecords = [], isLoading: recordsLoading } = useListWeighRecords({ date: dateFrom }, { query: { keepPreviousData: true } });
 
   const hourRangeInverted = useMemo(() => {
     const [fh, fm] = hourFrom.split(":").map(Number);
@@ -164,6 +164,12 @@ export default function RankingPage() {
               <Download className="w-4 h-4" /><span className="hidden sm:inline">Exportar CSV</span>
             </button>
           </div>
+            <div className="flex gap-2 flex-wrap mt-1">
+              <button onClick={() => { const t = format(new Date(), "yyyy-MM-dd"); setDateFrom(t); setDateTo(t); }} className="px-3 py-1 text-xs font-bold bg-primary/10 text-primary rounded-lg hover:bg-primary/20">Hoje</button>
+              <button onClick={() => { const t = format(new Date(Date.now() - 86400000), "yyyy-MM-dd"); setDateFrom(t); setDateTo(t); }} className="px-3 py-1 text-xs font-bold bg-muted text-muted-foreground rounded-lg hover:bg-muted/70">Ontem</button>
+              <button onClick={() => { setDateFrom(format(new Date(Date.now() - 6*86400000), "yyyy-MM-dd")); setDateTo(format(new Date(), "yyyy-MM-dd")); }} className="px-3 py-1 text-xs font-bold bg-muted text-muted-foreground rounded-lg hover:bg-muted/70">7 dias</button>
+              <button onClick={() => { setDateFrom(format(new Date(Date.now() - 29*86400000), "yyyy-MM-dd")); setDateTo(format(new Date(), "yyyy-MM-dd")); }} className="px-3 py-1 text-xs font-bold bg-muted text-muted-foreground rounded-lg hover:bg-muted/70">30 dias</button>
+            </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
