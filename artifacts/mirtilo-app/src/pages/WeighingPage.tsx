@@ -344,7 +344,18 @@ export default function WeighingPage() {
                       list="worker-ids-datalist"
                       placeholder="ID ou leitura QR (pistola)"
                       value={manualIdInput}
-                      onChange={(e) => setManualIdInput(e.target.value.toUpperCase())}
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase();
+                        setManualIdInput(val);
+                        const worker = workers.find(w => w.id === val);
+                        if (worker && worker.active) {
+                          beep("success");
+                          setActiveWorkerId(worker.id);
+                          setPendingIssues(new Set());
+                          setManualIdInput("");
+                          toast({ title: "Trabalhador Identificado", description: worker.name });
+                        }
+                      }}
                       className="flex-1 bg-background border-2 border-primary rounded-xl px-4 py-3 font-mono uppercase focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-lg"
                       data-testid="input-worker-id"
                       autoFocus
