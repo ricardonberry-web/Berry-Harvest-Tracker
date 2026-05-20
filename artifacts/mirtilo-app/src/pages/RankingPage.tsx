@@ -320,7 +320,6 @@ export default function RankingPage() {
             </div>
           </>
         )}
-      </div>
 
         {tab === "range" && (
           <div className="space-y-4">
