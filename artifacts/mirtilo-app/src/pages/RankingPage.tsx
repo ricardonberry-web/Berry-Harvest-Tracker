@@ -29,8 +29,9 @@ export default function RankingPage() {
   const [hourFrom, setHourFrom] = useState("00:00");
   const [hourTo, setHourTo] = useState("23:59");
   const [workerFilter, setWorkerFilter] = useState("");
-  const [editingRecord, setEditingRecord] = useState<{ id: number; weightGrams: number } | null>(null);
+  const [editingRecord, setEditingRecord] = useState<{ id: number; weightGrams: number; timestamp: string } | null>(null);
   const [editWeight, setEditWeight] = useState("");
+  const [editTimestamp, setEditTimestamp] = useState("");
 
   const updateRecord = useUpdateWeighRecord();
   const deleteRecord = useDeleteWeighRecord();
@@ -90,9 +91,10 @@ export default function RankingPage() {
 
   const handleExport = () => { window.location.href = `/api/reports/export?date=${date}`; };
 
-  const handleEdit = (id: number, weightGrams: number) => {
-    setEditingRecord({ id, weightGrams });
+  const handleEdit = (id: number, weightGrams: number, timestamp: string) => {
+    setEditingRecord({ id, weightGrams, timestamp });
     setEditWeight(String(weightGrams));
+    setEditTimestamp(format(new Date(timestamp), "yyyy-MM-dd'T'HH:mm"));
   };
 
   const handleEditSave = async () => {
@@ -100,7 +102,9 @@ export default function RankingPage() {
     const newWeight = parseInt(editWeight, 10);
     if (isNaN(newWeight) || newWeight <= 0) { toast({ title: "Peso inválido", variant: "destructive" }); return; }
     try {
-      await updateRecord.mutateAsync({ id: editingRecord.id, data: { weightGrams: newWeight } });
+      const updateData: any = { weightGrams: newWeight };
+      if (editTimestamp) updateData.timestamp = new Date(editTimestamp).toISOString();
+      await updateRecord.mutateAsync({ id: editingRecord.id, data: updateData });
       await queryClient.invalidateQueries();
       toast({ title: "Pesagem atualizada" });
       setEditingRecord(null);
@@ -126,6 +130,11 @@ export default function RankingPage() {
               <label className="text-sm font-medium text-muted-foreground">Peso (gramas)</label>
               <input type="number" value={editWeight} onChange={e => setEditWeight(e.target.value)}
                 className="w-full mt-1 border border-border rounded-lg px-4 py-2 text-lg font-mono focus:outline-none focus:border-primary" autoFocus />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Data e Hora</label>
+              <input type="datetime-local" value={editTimestamp} onChange={e => setEditTimestamp(e.target.value)}
+                className="w-full mt-1 border border-border rounded-lg px-4 py-2 font-mono focus:outline-none focus:border-primary" />
             </div>
             <div className="flex gap-3">
               <button onClick={() => setEditingRecord(null)} className="flex-1 py-2 rounded-lg border border-border font-bold hover:bg-muted/50">Cancelar</button>
@@ -299,7 +308,7 @@ export default function RankingPage() {
                             </td>
                             <td className="p-3 text-center">
                               <div className="flex items-center justify-center gap-2">
-                                <button onClick={() => handleEdit(r.id, r.weightGrams)} className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors" title="Editar"><Pencil className="w-4 h-4" /></button>
+                                <button onClick={() => handleEdit(r.id, r.weightGrams, r.timestamp)} className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors" title="Editar"><Pencil className="w-4 h-4" /></button>
                                 <button onClick={() => handleDelete(r.id)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors" title="Apagar"><Trash2 className="w-4 h-4" /></button>
                               </div>
                             </td>
