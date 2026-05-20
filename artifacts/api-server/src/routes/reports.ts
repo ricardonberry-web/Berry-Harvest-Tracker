@@ -186,83 +186,31 @@ router.get("/reports/export", async (req, res): Promise<void> => {
 });
 
 
-router.get("/reports/range", async (req, res): Promise<void> => {
-  const { from, to } = req.query as { from?: string; to?: string };
-  if (!from || !to) {
-    res.status(400).json({ error: "from and to are required" });
-    return;
-  }
 
-  const records = await db
-    .select({
-      workerId: weighRecordsTable.workerId,
-      workerName: workersTable.name,
-      totalCaixas: sql<number>`count(${weighRecordsTable.id})::int`,
-      totalGrams: sql<number>`sum(${weighRecordsTable.weightGrams})::float`,
-      mediaGrPorCaixa: sql<number>`avg(${weighRecordsTable.weightGrams})::float`,
-    })
-    .from(weighRecordsTable)
+router.get("/reports/range", async (req, res) => {
+  const { from, to } = req.query;
+  if (!from || !to) { res.status(400).json({ error: "from and to required" }); return; }
+  const records = await db.select({
+    workerId: weighRecordsTable.workerId,
+    workerName: workersTable.name,
+    totalCaixas: sql`count(${weighRecordsTable.id})::int`,
+    totalGrams: sql`sum(${weighRecordsTable.weightGrams})::float`,
+    mediaGrPorCaixa: sql`avg(${weighRecordsTable.weightGrams})::float`,
+  }).from(weighRecordsTable)
     .leftJoin(workersTable, eq(weighRecordsTable.workerId, workersTable.id))
     .where(sql`(${weighRecordsTable.timestamp} AT TIME ZONE ${BUSINESS_TZ})::date BETWEEN ${from}::date AND ${to}::date`)
     .groupBy(weighRecordsTable.workerId, workersTable.name)
     .orderBy(sql`sum(${weighRecordsTable.weightGrams}) desc`);
-
-  const totalKgAll = records.reduce((acc, r) => acc + (r.totalGrams || 0), 0) / 1000;
-  const totalRecordsAll = records.reduce((acc, r) => acc + (r.totalCaixas || 0), 0);
-
-  const workers = records.map((r) => {
-    const totalKg = (r.totalGrams || 0) / 1000;
-    return {
-      workerId: r.workerId,
-      workerName: r.workerName ?? r.workerId,
-      totalCaixas: r.totalCaixas,
-      totalKg: Math.round(totalKg * 100) / 100,
-      mediaGrPorCaixa: Math.round(r.mediaGrPorCaixa || 0),
-    };
-  });
-
+  const totalKgAll = records.reduce((a, r) => a + (Number(r.totalGrams) || 0), 0) / 1000;
+  const totalRecordsAll = records.reduce((a, r) => a + (Number(r.totalCaixas) || 0), 0);
+  const workers = records.map(r => ({
+    workerId: r.workerId,
+    workerName: r.workerName ?? r.workerId,
+    totalCaixas: Number(r.totalCaixas),
+    totalKg: Math.round((Number(r.totalGrams) || 0) / 1000 * 100) / 100,
+    mediaGrPorCaixa: Math.round(Number(r.mediaGrPorCaixa) || 0),
+  }));
   res.json({ from, to, workers, totalRecords: totalRecordsAll, totalKg: Math.round(totalKgAll * 100) / 100 });
 });
 
-export default router;
-
-
-router.get("/reports/range", async (req, res): Promise<void> => {
-  const { from, to } = req.query as { from?: string; to?: string };
-  if (!from || !to) {
-    res.status(400).json({ error: "from and to are required" });
-    return;
-  }
-
-  const records = await db
-    .select({
-      workerId: weighRecordsTable.workerId,
-      workerName: workersTable.name,
-      totalCaixas: sql<number>`count(${weighRecordsTable.id})::int`,
-      totalGrams: sql<number>`sum(${weighRecordsTable.weightGrams})::float`,
-      mediaGrPorCaixa: sql<number>`avg(${weighRecordsTable.weightGrams})::float`,
-    })
-    .from(weighRecordsTable)
-    .leftJoin(workersTable, eq(weighRecordsTable.workerId, workersTable.id))
-    .where(
-      sql`(${weighRecordsTable.timestamp} AT TIME ZONE ${BUSINESS_TZ})::date BETWEEN ${from}::date AND ${to}::date`,
-    )
-    .groupBy(weighRecordsTable.workerId, workersTable.name)
-    .orderBy(sql`sum(${weighRecordsTable.weightGrams}) desc`);
-
-  const issueRows = await db.execute<{ worker_id: string; issue: string; cnt: number }>(sql`
-    SELECT ${weighRecordsTable.workerId} AS worker_id, issue, COUNT(*)::int AS cnt
-    FROM ${weighRecordsTable}, LATERAL unnest(${weighRecordsTable.qualityIssues}) AS issue
-    WHERE (${weighRecordsTable.timestamp} AT TIME ZONE ${BUSINESS_TZ})::date BETWEEN ${from}::date AND ${to}::date
-    GROUP BY ${weighRecordsTable.workerId}, issue
-  `);
-
-  const issuesByWorker = new Map<string, Record<string, number>>();
-  for (const row of issueRows.rows) {
-    const map = issuesByWorker.get(row.worker_id) ?? {};
-    map[row.issue] = Number(row.cnt) || 0;
-    issuesByWorker.set(row.worker_id, map);
-  }
-
-  const emptyIssues = () => ({
 export default router;
