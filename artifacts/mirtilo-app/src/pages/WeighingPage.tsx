@@ -44,6 +44,7 @@ export default function WeighingPage() {
   const [showScanner, setShowScanner] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const lastRecordTimeRef = useRef<number>(0);
+  const scanInputRef = useRef<HTMLInputElement>(null);
 
   // ── Weight mode ──
   const [weightMode, setWeightMode] = useState<WeightMode>("scale");
@@ -190,6 +191,13 @@ export default function WeighingPage() {
     return () => stopScanner();
   }, [showScanner]);
 
+  // Auto-focus scan input when no worker selected
+  useEffect(() => {
+    if (!activeWorkerId) {
+      setTimeout(() => scanInputRef.current?.focus(), 100);
+    }
+  }, [activeWorkerId]);
+
   // ── Manual ID submit ──
   const handleManualIdSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -331,13 +339,15 @@ export default function WeighingPage() {
 
                   <form onSubmit={handleManualIdSubmit} className="flex gap-2">
                     <input
+                      ref={scanInputRef}
                       type="text"
                       list="worker-ids-datalist"
-                      placeholder="ID do Trabalhador (ex: W001)"
+                      placeholder="ID ou leitura QR (pistola)"
                       value={manualIdInput}
-                      onChange={(e) => setManualIdInput(e.target.value)}
-                      className="flex-1 bg-background border-2 border-border rounded-xl px-4 py-3 font-mono uppercase focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-lg"
+                      onChange={(e) => setManualIdInput(e.target.value.toUpperCase())}
+                      className="flex-1 bg-background border-2 border-primary rounded-xl px-4 py-3 font-mono uppercase focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-lg"
                       data-testid="input-worker-id"
+                      autoFocus
                     />
                     <datalist id="worker-ids-datalist">
                       {workers
@@ -348,9 +358,7 @@ export default function WeighingPage() {
                           </option>
                         ))}
                     </datalist>
-                    <button type="submit" className="bg-primary text-primary-foreground px-6 font-bold rounded-xl hover:opacity-90 transition-opacity text-lg">
-                      OK
-                    </button>
+
                   </form>
                 </div>
               ) : (
