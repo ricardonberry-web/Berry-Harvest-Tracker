@@ -167,11 +167,11 @@ export default function RankingPage() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <StatCard label="Total Colhido" value={`${report?.totalKg.toFixed(1) || 0} kg`} />
+          <StatCard label="Total Colhido" value={`${(report?.totalKg ?? 0).toFixed(1) || 0} kg`} />
           <StatCard label="Total Caixas" value={report?.totalRecords.toString() || "0"} />
           <StatCard label="Trabalhadores" value={report?.workers.length.toString() || "0"} />
-          <StatCard label="Horas equipa" value={`${teamHours.toFixed(1)} h`} />
-          <StatCard label="Kg / hora (equipa)" value={teamKgPorHora !== null ? `${teamKgPorHora.toFixed(2)} kg/h` : "—"} highlight />
+          <StatCard label="Horas equipa" value={`${(teamHours ?? 0).toFixed(1)} h`} />
+          <StatCard label="Kg / hora (equipa)" value={teamKgPorHora !== null ? `${(teamKgPorHora ?? 0).toFixed(2)} kg/h` : "—"} highlight />
         </div>
 
         <div className="bg-card border border-border rounded-2xl p-1 flex gap-1">
@@ -224,11 +224,11 @@ export default function RankingPage() {
                           </td>
                           <td className="p-4"><p className="font-bold">{w.workerName}</p><p className="text-xs text-muted-foreground font-mono">{w.workerId}</p></td>
                           <td className="p-4 text-right font-medium">{w.totalCaixas}</td>
-                          <td className="p-4 text-right"><span className="bg-primary/10 text-primary px-3 py-1 rounded-lg font-bold text-lg">{w.totalKg.toFixed(2)}</span></td>
+                          <td className="p-4 text-right"><span className="bg-primary/10 text-primary px-3 py-1 rounded-lg font-bold text-lg">{(w.totalKg ?? 0).toFixed(2)}</span></td>
                           <td className="p-4 text-right font-medium">{fmtHours(w.hoursWorked)}</td>
-                          <td className="p-4 text-right">{w.kgPorHora !== null ? <span className="bg-success/10 text-success px-2.5 py-1 rounded-lg font-bold">{w.kgPorHora.toFixed(2)}</span> : <span className="text-muted-foreground">—</span>}</td>
-                          <td className="p-4 text-right text-muted-foreground hidden sm:table-cell">{w.mediaGrPorCaixa.toFixed(0)}g</td>
-                          <td className="p-4 text-right text-muted-foreground hidden md:table-cell">{w.caixasPorHora.toFixed(1)}</td>
+                          <td className="p-4 text-right">{w.kgPorHora !== null ? <span className="bg-success/10 text-success px-2.5 py-1 rounded-lg font-bold">{(w.kgPorHora ?? 0).toFixed(2)}</span> : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="p-4 text-right text-muted-foreground hidden sm:table-cell">{(w.mediaGrPorCaixa ?? 0).toFixed(0)}g</td>
+                          <td className="p-4 text-right text-muted-foreground hidden md:table-cell">{(w.caixasPorHora ?? 0).toFixed(1)}</td>
                           <td className="p-4 text-center hidden sm:table-cell">
                             {w.totalIssues > 0 ? <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">{w.totalIssues}</span> : <span className="text-muted-foreground text-xs">—</span>}
                           </td>
@@ -261,7 +261,7 @@ export default function RankingPage() {
               </label>
               <div className="md:ml-auto text-right shrink-0">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">No filtro</p>
-                <p className="text-2xl font-display font-bold text-primary">{filteredRecords.length} <span className="text-sm font-medium text-muted-foreground">caixas · </span>{filteredTotalKg.toFixed(2)} <span className="text-sm font-medium text-muted-foreground">kg</span></p>
+                <p className="text-2xl font-display font-bold text-primary">{filteredRecords.length} <span className="text-sm font-medium text-muted-foreground">caixas · </span>{(filteredTotalKg ?? 0).toFixed(2)} <span className="text-sm font-medium text-muted-foreground">kg</span></p>
               </div>
             </div>
             {hourRangeInverted && <div className="bg-amber-50 border border-amber-300/60 text-amber-800 rounded-xl px-4 py-2 text-sm">Intervalo invertido — a mostrar entre {hourTo} e {hourFrom}.</div>}
