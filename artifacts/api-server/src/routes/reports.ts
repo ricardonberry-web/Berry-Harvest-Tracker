@@ -221,6 +221,7 @@ router.get("/reports/range", async (req, res) => {
     const totalKg = Math.round((Number(r.totalGrams) || 0) / 1000 * 100) / 100;
     const hoursWorked = hoursByWorker.get(r.workerId) ? Math.round(hoursByWorker.get(r.workerId) * 100) / 100 : null;
     const kgPorHora = hoursWorked ? Math.round(totalKg / hoursWorked * 100) / 100 : null;
+    const caixasPorHora = hoursWorked ? Math.round(Number(r.totalCaixas) / hoursWorked * 100) / 100 : 0;
     return {
       workerId: r.workerId,
       workerName: r.workerName ?? r.workerId,
@@ -229,6 +230,7 @@ router.get("/reports/range", async (req, res) => {
       mediaGrPorCaixa: Math.round(Number(r.mediaGrPorCaixa) || 0),
       hoursWorked,
       kgPorHora,
+      caixasPorHora,
     };
   });
 
