@@ -201,16 +201,37 @@ router.get("/reports/range", async (req, res) => {
     .where(sql`(${weighRecordsTable.timestamp} AT TIME ZONE ${BUSINESS_TZ})::date BETWEEN ${from}::date AND ${to}::date`)
     .groupBy(weighRecordsTable.workerId, workersTable.name)
     .orderBy(sql`sum(${weighRecordsTable.weightGrams}) desc`);
+
+  const attendance = await db.select().from(attendanceTable)
+    .where(sql`${attendanceTable.date} BETWEEN ${from} AND ${to}`);
+
+  const hoursByWorker = new Map();
+  for (const att of attendance) {
+    if (att.checkInAt && att.checkOutAt) {
+      const h = (new Date(att.checkOutAt).getTime() - new Date(att.checkInAt).getTime()) / 3600000;
+      hoursByWorker.set(att.workerId, (hoursByWorker.get(att.workerId) || 0) + h);
+    }
+  }
+
   const totalKgAll = records.reduce((a, r) => a + (Number(r.totalGrams) || 0), 0) / 1000;
   const totalRecordsAll = records.reduce((a, r) => a + (Number(r.totalCaixas) || 0), 0);
-  const workers = records.map(r => ({
-    workerId: r.workerId,
-    workerName: r.workerName ?? r.workerId,
-    totalCaixas: Number(r.totalCaixas),
-    totalKg: Math.round((Number(r.totalGrams) || 0) / 1000 * 100) / 100,
-    mediaGrPorCaixa: Math.round(Number(r.mediaGrPorCaixa) || 0),
-  }));
-  res.json({ from, to, workers, totalRecords: totalRecordsAll, totalKg: Math.round(totalKgAll * 100) / 100 });
-});
+  const totalHoursAll = Array.from(hoursByWorker.values()).reduce((a, b) => a + b, 0);
 
+  const workers = records.map(r => {
+    const totalKg = Math.round((Number(r.totalGrams) || 0) / 1000 * 100) / 100;
+    const hoursWorked = hoursByWorker.get(r.workerId) ? Math.round(hoursByWorker.get(r.workerId) * 100) / 100 : null;
+    const kgPorHora = hoursWorked ? Math.round(totalKg / hoursWorked * 100) / 100 : null;
+    return {
+      workerId: r.workerId,
+      workerName: r.workerName ?? r.workerId,
+      totalCaixas: Number(r.totalCaixas),
+      totalKg,
+      mediaGrPorCaixa: Math.round(Number(r.mediaGrPorCaixa) || 0),
+      hoursWorked,
+      kgPorHora,
+    };
+  });
+
+  res.json({ from, to, workers, totalRecords: totalRecordsAll, totalKg: Math.round(totalKgAll * 100) / 100, totalHours: Math.round(totalHoursAll * 100) / 100 });
+});
 export default router;
