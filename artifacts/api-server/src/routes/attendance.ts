@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db, workersTable, attendanceTable } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -105,25 +105,11 @@ router.post("/attendance/check-in", async (req, res): Promise<void> => {
     return;
   }
 
-  // Insert if absent; otherwise update check-in to now and clear check-out
-  const existing = await db
-    .select()
-    .from(attendanceTable)
-    .where(and(eq(attendanceTable.workerId, workerId), eq(attendanceTable.date, date)));
-
-  let row;
-  if (existing.length === 0) {
-    [row] = await db
-      .insert(attendanceTable)
-      .values({ workerId, date, checkInAt: new Date(), checkOutAt: null })
-      .returning();
-  } else {
-    [row] = await db
-      .update(attendanceTable)
-      .set({ checkInAt: new Date(), checkOutAt: null })
-      .where(eq(attendanceTable.id, existing[0].id))
-      .returning();
-  }
+  // Always create a new record for each check-in (supports multiple shifts per day)
+  const [row] = await db
+    .insert(attendanceTable)
+    .values({ workerId, date, checkInAt: new Date(), checkOutAt: null })
+    .returning();
 
   res.json(
     serialiseEntry({
@@ -156,10 +142,13 @@ router.post("/attendance/check-out", async (req, res): Promise<void> => {
 
   // Allow check-out for inactive workers IF they already have an open
   // attendance row for the date — otherwise we'd strand their shift.
+  // Find the last open shift for this worker today
   const existing = await db
     .select()
     .from(attendanceTable)
-    .where(and(eq(attendanceTable.workerId, workerId), eq(attendanceTable.date, date)));
+    .where(and(eq(attendanceTable.workerId, workerId), eq(attendanceTable.date, date), isNull(attendanceTable.checkOutAt)))
+    .orderBy(desc(attendanceTable.checkInAt))
+    .limit(1);
 
   if (existing.length === 0) {
     res.status(404).json({ error: "Worker is not checked in today" });
