@@ -64,7 +64,7 @@ export default function AttendancePage() {
 
   const doCheckInSelected = async () => {
     if (selected.size === 0) return;
-    if (!window.confirm(`Registar ENTRADA de ${selected.size} trabalhador(es) seleccionado(s)?`)) return;
+
     setBulkBusy("in");
     try {
       await checkInAll.mutateAsync({ data: { workerIds: Array.from(selected) } });
@@ -82,7 +82,7 @@ export default function AttendancePage() {
 
   const doCheckOutSelected = async () => {
     if (selected.size === 0) return;
-    if (!window.confirm(`Registar SAÍDA de ${selected.size} trabalhador(es) seleccionado(s)?`)) return;
+
     setBulkBusy("out");
     try {
       await checkOutAll.mutateAsync({ data: { workerIds: Array.from(selected) } });
