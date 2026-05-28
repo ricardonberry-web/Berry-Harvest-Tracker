@@ -148,8 +148,19 @@ export default function WeighingPage() {
   // ── QR Scanner ──
   const startScannerRef = useRef<() => void>(() => {});
 
+  const showScannerRef = useRef(false);
+  useEffect(() => { showScannerRef.current = showScanner; }, [showScanner]);
+
   const handleQRScan = useCallback((code: string) => {
-    const worker = workers.find(w => w.id === code.trim().toUpperCase());
+    const cleaned = code.trim().toUpperCase();
+    const worker = workers.find(w => w.id === cleaned);
+    const restartCameraIfOpen = () => {
+      if (!showScannerRef.current) return;
+      setTimeout(() => {
+        // Re-check at fire time — user may have closed the camera meanwhile
+        if (showScannerRef.current) startScannerRef.current();
+      }, 1500);
+    };
     if (worker && !worker.active) {
       beep("error");
       toast({
@@ -157,23 +168,24 @@ export default function WeighingPage() {
         description: `${worker.name} (${worker.id}) está inativo. Reative-o em Equipa.`,
         variant: "destructive",
       });
-      setTimeout(() => startScannerRef.current(), 1500);
+      restartCameraIfOpen();
       return;
     }
     if (worker) {
       beep("success");
       setActiveWorkerId(worker.id);
       setPendingIssues(new Set());
+      setManualIdInput("");
       setShowScanner(false);
       toast({ title: "Trabalhador Identificado", description: `${worker.name} (${worker.id})` });
     } else {
       beep("error");
       toast({
         title: "QR não reconhecido",
-        description: `"${code}" não corresponde a nenhum trabalhador. A continuar a leitura…`,
+        description: `"${cleaned}" não corresponde a nenhum trabalhador.`,
         variant: "destructive",
       });
-      setTimeout(() => startScannerRef.current(), 1500);
+      restartCameraIfOpen();
     }
   }, [workers, beep, toast]);
 
@@ -197,6 +209,66 @@ export default function WeighingPage() {
       setTimeout(() => scanInputRef.current?.focus(), 100);
     }
   }, [activeWorkerId]);
+
+  // ── Global HID barcode/QR scanner buffer (e.g. Iatech BCST-35) ──
+  // The scanner emits scanned codes as ultra-fast keystrokes ending in Enter.
+  // We capture them anywhere on the page so the operator can scan a new badge
+  // even while a worker is already selected (switches worker on the fly).
+  // Skips real text inputs/textareas so manual typing in edit fields still works.
+  useEffect(() => {
+    let buffer = "";
+    let lastKeyAt = 0;
+    const FAST_KEY_MS = 60; // human typing rarely beats ~80ms between keys
+    const MIN_CODE_LEN = 3;
+
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const isManualScanInput = target === scanInputRef.current;
+      const isOtherTextField =
+        (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) &&
+        !isManualScanInput;
+      // Let normal typing inputs handle themselves (weight edit, name edit, etc.)
+      if (isOtherTextField) return;
+
+      // Don't intercept scans while a blocking modal/dialog is open
+      // (checklist, edit pesagem, confirm dialogs, etc.). Switching the active
+      // worker behind a modal would be invisible and confusing to the operator.
+      const modalOpen =
+        typeof document !== "undefined" &&
+        document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]');
+      if (modalOpen && !isManualScanInput) {
+        buffer = "";
+        return;
+      }
+
+      const now = performance.now();
+      const gap = now - lastKeyAt;
+      lastKeyAt = now;
+
+      if (e.key === "Enter") {
+        const code = buffer.trim();
+        buffer = "";
+        if (code.length >= MIN_CODE_LEN) {
+          // Manual input handles its own submit; don't double-process
+          if (isManualScanInput) return;
+          e.preventDefault();
+          handleQRScan(code);
+        }
+        return;
+      }
+
+      // Reset buffer if previous keystroke was too slow (= human typing, not scan)
+      if (gap > FAST_KEY_MS && buffer.length > 0) buffer = "";
+
+      if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleQRScan]);
 
   // ── Manual ID submit ──
   const handleManualIdSubmit = (e: React.FormEvent) => {
@@ -341,35 +413,23 @@ export default function WeighingPage() {
                     <input
                       ref={scanInputRef}
                       type="text"
-                      list="worker-ids-datalist"
                       placeholder="ID ou leitura QR (pistola)"
                       value={manualIdInput}
-                      onChange={(e) => {
-                        const val = e.target.value.toUpperCase();
-                        setManualIdInput(val);
-                        const worker = workers.find(w => w.id === val);
-                        if (worker && worker.active) {
-                          beep("success");
-                          setActiveWorkerId(worker.id);
-                          setPendingIssues(new Set());
-                          setManualIdInput("");
-                          toast({ title: "Trabalhador Identificado", description: worker.name });
-                        }
-                      }}
+                      onChange={(e) => setManualIdInput(e.target.value.toUpperCase())}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
                       className="flex-1 bg-background border-2 border-primary rounded-xl px-4 py-3 font-mono uppercase focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-lg"
                       data-testid="input-worker-id"
                       autoFocus
                     />
-                    <datalist id="worker-ids-datalist">
-                      {workers
-                        .filter(w => w.active !== false)
-                        .map(w => (
-                          <option key={w.id} value={w.id}>
-                            {w.name}
-                          </option>
-                        ))}
-                    </datalist>
-
+                    <button
+                      type="submit"
+                      className="px-5 py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/25 hover:shadow-primary/40 active:scale-[0.98] transition-all"
+                      data-testid="button-submit-manual-id"
+                    >
+                      OK
+                    </button>
                   </form>
                 </div>
               ) : (

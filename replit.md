@@ -39,6 +39,17 @@ PWA para Android (Chrome) que regista pesagens de caixas de mirtilo em campo. Co
 
 **Seed inicial:** W001–W004 (Maria Silva, João Costa, Ana Pereira, Carlos Matos)
 
+## Leitor de QR/Códigos de Barras (USB HID)
+
+Suporta pistolas HID tipo **Iatech BCST-35** (USB ou Bluetooth, modo teclado). Detalhes:
+- Input manual de ID na página de pesagem só identifica o trabalhador no **submit** (Enter / botão OK). Sem `<datalist>` e sem autocomplete (evita matches parciais que escolhiam sempre o mesmo trabalhador).
+- `WeighingPage` regista um listener global `keydown` que faz buffer de teclas rápidas (gap < 60ms) e, quando recebe ≥3 caracteres seguidos de Enter, encaminha para `handleQRScan`. Permite trocar de trabalhador mid-shift mesmo com outro já identificado.
+- Inputs de texto/textarea/contentEditable são ignorados pelo buffer global para não interferir com edição manual (pesos, nomes, etc.).
+
+## Configuração de ambiente
+
+- A app usa Supabase apenas para `access_logs`. As variáveis no Replit estão sem prefixo (`SUPABASE_URL`, `SUPABASE_ANON_KEY`); o `vite.config.ts` mapeia-as via `define` para `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` em build time. Se este `define` for removido a página fica em branco no arranque.
+
 ## API Endpoints
 
 | Método | Rota | Descrição |
