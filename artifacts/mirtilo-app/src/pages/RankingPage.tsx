@@ -103,7 +103,7 @@ export default function RankingPage() {
     if (isNaN(newWeight) || newWeight <= 0) { toast({ title: "Peso inválido", variant: "destructive" }); return; }
     try {
       const updateData: any = { weightGrams: newWeight };
-      if (editTimestamp) { const d = new Date(editTimestamp); const offset = d.getTimezoneOffset() * 60000; updateData.timestamp = new Date(d.getTime() - offset).toISOString(); }
+      if (editTimestamp) { updateData.timestamp = new Date(editTimestamp).toISOString(); }
       await updateRecord.mutateAsync({ id: editingRecord.id, data: updateData });
       await queryClient.invalidateQueries();
       toast({ title: "Pesagem atualizada" });

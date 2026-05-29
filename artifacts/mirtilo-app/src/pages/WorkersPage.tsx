@@ -509,8 +509,12 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          checkInAt: editCheckIn ? (() => { const d = new Date(editingDay.date + "T" + editCheckIn + ":00"); const offset = d.getTimezoneOffset() * 60000; return new Date(d.getTime() - offset).toISOString(); })() : null,
-          checkOutAt: editCheckOut ? (() => { const d = new Date(editingDay.date + "T" + editCheckOut + ":00"); const offset = d.getTimezoneOffset() * 60000; return new Date(d.getTime() - offset).toISOString(); })() : null,
+          // A hora introduzida (ex.: "06:00") é interpretada na hora local do
+          // dispositivo (Europe/Lisbon no tablet) e convertida para o instante
+          // UTC correto. A exibição usa format(new Date(iso)) que reconverte
+          // para a hora local — round-trip sem o desvio de +1h.
+          checkInAt: editCheckIn ? new Date(editingDay.date + "T" + editCheckIn + ":00").toISOString() : null,
+          checkOutAt: editCheckOut ? new Date(editingDay.date + "T" + editCheckOut + ":00").toISOString() : null,
         }),
       });
       await queryClient.invalidateQueries();

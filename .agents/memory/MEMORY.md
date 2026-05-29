@@ -1,2 +1,3 @@
 - [Mirtilo Vite env quirk](mirtilo-vite-env.md) — supabase.ts reads VITE_SUPABASE_* but secrets are stored unprefixed; vite.config has a define-fallback to SUPABASE_*.
 - [HID barcode scanner pattern](hid-scanner-pattern.md) — USB HID scanners (e.g. Iatech BCST-35) act as keyboards; capture via global window keydown buffer, not per-input handlers.
+- [Timezone edit round-trip](timezone-edit-roundtrip.md) — send edited times as plain new Date(...).toISOString(); the offset-subtraction hack shifts +1h on the Lisbon tablet; dev container is UTC so it hides there.
