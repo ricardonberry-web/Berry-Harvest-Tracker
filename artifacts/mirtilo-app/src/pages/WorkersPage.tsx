@@ -509,8 +509,8 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          checkInAt: editCheckIn ? editingDay.date + "T" + editCheckIn + ":00" : null,
-          checkOutAt: editCheckOut ? editingDay.date + "T" + editCheckOut + ":00" : null,
+          checkInAt: editCheckIn ? (() => { const d = new Date(editingDay.date + "T" + editCheckIn + ":00"); const offset = d.getTimezoneOffset() * 60000; return new Date(d.getTime() - offset).toISOString(); })() : null,
+          checkOutAt: editCheckOut ? (() => { const d = new Date(editingDay.date + "T" + editCheckOut + ":00"); const offset = d.getTimezoneOffset() * 60000; return new Date(d.getTime() - offset).toISOString(); })() : null,
         }),
       });
       await queryClient.invalidateQueries();
