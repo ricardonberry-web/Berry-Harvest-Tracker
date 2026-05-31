@@ -172,11 +172,12 @@ export default function RankingPage() {
             </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           <StatCard label="Total Colhido" value={`${(report?.totalKg ?? 0).toFixed(1) || 0} kg`} />
           <StatCard label="Total Caixas" value={report?.totalRecords.toString() || "0"} />
           <StatCard label="Trabalhadores" value={report?.workers.length.toString() || "0"} />
           <StatCard label="Horas equipa" value={`${(teamHours ?? 0).toFixed(1)} h`} />
+          <StatCard label="Custo equipa" value={`${(teamHours * 7.5).toFixed(2)} €`} />
           <StatCard label="Kg / hora (equipa)" value={teamKgPorHora !== null ? `${(teamKgPorHora ?? 0).toFixed(2)} kg/h` : "—"} highlight />
         </div>
 
