@@ -491,6 +491,7 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
   const [to, setTo] = useState(format(new Date(), "yyyy-MM-dd"));
   const [rateInput, setRateInput] = useState("");
   const [editingDay, setEditingDay] = useState(null);
+  const [editDate, setEditDate] = useState("");
   const [editCheckIn, setEditCheckIn] = useState("");
   const [editCheckOut, setEditCheckOut] = useState("");
   const queryClient = useQueryClient();
@@ -498,25 +499,34 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
 
   const handleEditDay = (d) => {
     setEditingDay(d);
+    setEditDate(d.date);
     setEditCheckIn(d.checkInAt ? format(new Date(d.checkInAt), "HH:mm") : "");
     setEditCheckOut(d.checkOutAt ? format(new Date(d.checkOutAt), "HH:mm") : "");
   };
 
   const handleEditSave = async () => {
     if (!editingDay) return;
+    if (!editDate) { toast({ title: "Data inválida", variant: "destructive" }); return; }
     try {
-      await fetch(import.meta.env.VITE_API_URL + "/api/attendance/" + worker.id + "/" + editingDay.date, {
+      const res = await fetch(import.meta.env.VITE_API_URL + "/api/attendance/" + worker.id + "/" + editingDay.date, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          // A hora introduzida (ex.: "06:00") é interpretada na hora local do
-          // dispositivo (Europe/Lisbon no tablet) e convertida para o instante
-          // UTC correto. A exibição usa format(new Date(iso)) que reconverte
-          // para a hora local — round-trip sem o desvio de +1h.
-          checkInAt: editCheckIn ? new Date(editingDay.date + "T" + editCheckIn + ":00").toISOString() : null,
-          checkOutAt: editCheckOut ? new Date(editingDay.date + "T" + editCheckOut + ":00").toISOString() : null,
+          // O dia pode ser alterado (editDate). As horas são reconstruídas com a
+          // nova data: a hora introduzida (ex.: "06:00") é interpretada na hora
+          // local do dispositivo (Europe/Lisbon no tablet) e convertida para o
+          // instante UTC correto. A exibição usa format(new Date(iso)) que
+          // reconverte para a hora local — round-trip sem o desvio de +1h.
+          date: editDate,
+          checkInAt: editCheckIn ? new Date(editDate + "T" + editCheckIn + ":00").toISOString() : null,
+          checkOutAt: editCheckOut ? new Date(editDate + "T" + editCheckOut + ":00").toISOString() : null,
         }),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast({ title: body.error ?? "Erro ao atualizar", variant: "destructive" });
+        return;
+      }
       await queryClient.invalidateQueries();
       toast({ title: "Registo atualizado" });
       setEditingDay(null);
@@ -563,6 +573,11 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="bg-card w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4">
         <h2 className="text-lg font-bold">Editar Registo</h2>
+        <div>
+          <label className="text-sm font-medium text-muted-foreground">Dia</label>
+          <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)}
+            className="w-full mt-1 border border-border rounded-lg px-4 py-2 font-mono focus:outline-none focus:border-primary" />
+        </div>
         <div>
           <label className="text-sm font-medium text-muted-foreground">Entrada</label>
           <input type="time" value={editCheckIn} onChange={e => setEditCheckIn(e.target.value)}

@@ -243,7 +243,7 @@ export default router;
 
 router.patch("/attendance/:workerId/:date", async (req, res): Promise<void> => {
   const { workerId, date } = req.params;
-  const { checkInAt, checkOutAt } = req.body;
+  const { checkInAt, checkOutAt, date: newDateRaw } = req.body;
 
   const existing = await db
     .select()
@@ -259,6 +259,26 @@ router.patch("/attendance/:workerId/:date", async (req, res): Promise<void> => {
   if (checkInAt !== undefined) updateData.checkInAt = checkInAt ? new Date(checkInAt) : null;
   if (checkOutAt !== undefined) updateData.checkOutAt = checkOutAt ? new Date(checkOutAt) : null;
 
+  // Permitir mover o registo para outro dia. Existe um índice único
+  // (worker_id, date), por isso rejeitamos se o trabalhador já tiver
+  // um registo nesse dia para evitar violar a constraint.
+  const newDate = typeof newDateRaw === "string" && newDateRaw ? newDateRaw : date;
+  if (newDate !== date && !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+    res.status(400).json({ error: "Data inválida (formato AAAA-MM-DD)" });
+    return;
+  }
+  if (newDate !== date) {
+    const clash = await db
+      .select()
+      .from(attendanceTable)
+      .where(and(eq(attendanceTable.workerId, workerId), eq(attendanceTable.date, newDate)));
+    if (clash.length > 0) {
+      res.status(409).json({ error: "Já existe um registo deste trabalhador nesse dia" });
+      return;
+    }
+    updateData.date = newDate;
+  }
+
   const [updated] = await db
     .update(attendanceTable)
     .set(updateData)
@@ -270,7 +290,7 @@ router.patch("/attendance/:workerId/:date", async (req, res): Promise<void> => {
   res.json(serialiseEntry({
     workerId,
     workerName: worker?.name ?? workerId,
-    date,
+    date: newDate,
     checkInAt: updated.checkInAt,
     checkOutAt: updated.checkOutAt,
   }));
