@@ -32,6 +32,14 @@ function parseRate(input: unknown): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+type TimesheetShift = {
+  id: number;
+  checkInAt: string | null;
+  checkOutAt: string | null;
+  hoursWorked: number | null;
+  pay: number | null;
+};
+
 type TimesheetDay = {
   date: string;
   checkInAt: string | null;
@@ -40,6 +48,7 @@ type TimesheetDay = {
   pay: number | null;
   totalIssues: number;
   issuesByType: IssueCounts;
+  shifts: TimesheetShift[];
 };
 
 async function buildTimesheet(workerId: string, from: string, to: string, hourlyRate: number | null) {
@@ -78,34 +87,84 @@ async function buildTimesheet(workerId: string, from: string, to: string, hourly
     issuesByDay.set(row.d, bucket);
   }
 
-  const days: TimesheetDay[] = rows.map((r) => {
-    const checkIn = r.checkInAt ? new Date(r.checkInAt) : null;
-    const checkOut = r.checkOutAt ? new Date(r.checkOutAt) : null;
-    let hoursWorked: number | null = null;
-    if (checkIn && checkOut) {
-      const h = Math.max(0, (checkOut.getTime() - checkIn.getTime()) / 3_600_000);
-      hoursWorked = Math.round(h * 100) / 100;
-    }
-    const pay =
-      hoursWorked !== null && hourlyRate !== null
-        ? Math.round(hoursWorked * hourlyRate * 100) / 100
+  // A day can now have several shifts (entradas/saídas). Group the rows by day,
+  // expose each shift, and aggregate the day total = sum of all its shifts.
+  const rowsByDate = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const list = rowsByDate.get(r.date) ?? [];
+    list.push(r);
+    rowsByDate.set(r.date, list);
+  }
+
+  const days: TimesheetDay[] = [...rowsByDate.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, dayRows]) => {
+      const shifts: TimesheetShift[] = dayRows
+        .slice()
+        .sort(
+          (a, b) =>
+            (a.checkInAt ? new Date(a.checkInAt).getTime() : 0) -
+            (b.checkInAt ? new Date(b.checkInAt).getTime() : 0),
+        )
+        .map((r) => {
+          const checkIn = r.checkInAt ? new Date(r.checkInAt) : null;
+          const checkOut = r.checkOutAt ? new Date(r.checkOutAt) : null;
+          let hoursWorked: number | null = null;
+          if (checkIn && checkOut) {
+            const h = Math.max(0, (checkOut.getTime() - checkIn.getTime()) / 3_600_000);
+            hoursWorked = Math.round(h * 100) / 100;
+          }
+          const pay =
+            hoursWorked !== null && hourlyRate !== null
+              ? Math.round(hoursWorked * hourlyRate * 100) / 100
+              : null;
+          return {
+            id: r.id,
+            checkInAt: checkIn ? checkIn.toISOString() : null,
+            checkOutAt: checkOut ? checkOut.toISOString() : null,
+            hoursWorked,
+            pay,
+          };
+        });
+
+      const hasClosed = shifts.some((s) => s.hoursWorked !== null);
+      const hoursWorked = hasClosed
+        ? Math.round(shifts.reduce((acc, s) => acc + (s.hoursWorked ?? 0), 0) * 100) / 100
         : null;
-    const issuesByType = issuesByDay.get(r.date) ?? emptyIssues();
-    const totalIssues = Object.values(issuesByType).reduce((a, b) => a + b, 0);
-    return {
-      date: r.date,
-      checkInAt: checkIn ? checkIn.toISOString() : null,
-      checkOutAt: checkOut ? checkOut.toISOString() : null,
-      hoursWorked,
-      pay,
-      totalIssues,
-      issuesByType,
-    };
-  });
+      const pay =
+        hoursWorked !== null && hourlyRate !== null
+          ? Math.round(hoursWorked * hourlyRate * 100) / 100
+          : null;
+
+      const hasOpen = shifts.some((s) => s.checkOutAt === null);
+      const firstCheckIn = shifts.reduce<string | null>(
+        (m, s) => (s.checkInAt && (!m || s.checkInAt < m) ? s.checkInAt : m),
+        null,
+      );
+      const lastCheckOut = hasOpen
+        ? null
+        : shifts.reduce<string | null>(
+            (m, s) => (s.checkOutAt && (!m || s.checkOutAt > m) ? s.checkOutAt : m),
+            null,
+          );
+
+      const issuesByType = issuesByDay.get(date) ?? emptyIssues();
+      const totalIssues = Object.values(issuesByType).reduce((a, b) => a + b, 0);
+      return {
+        date,
+        checkInAt: firstCheckIn,
+        checkOutAt: lastCheckOut,
+        hoursWorked,
+        pay,
+        totalIssues,
+        issuesByType,
+        shifts,
+      };
+    });
 
   const totalHours =
     Math.round(days.reduce((acc, d) => acc + (d.hoursWorked ?? 0), 0) * 100) / 100;
-  const totalDays = days.filter((d) => d.checkInAt !== null).length;
+  const totalDays = days.length;
   const totalPay =
     hourlyRate !== null ? Math.round(totalHours * hourlyRate * 100) / 100 : null;
 
@@ -157,9 +216,11 @@ router.get("/workers/:id/timesheet/export", async (req, res): Promise<void> => {
     "Data;Entrada;Saida;Horas;Valor_EUR\n";
 
   const rows = ts.days
-    .map(
-      (d) =>
-        `${d.date};${fmtTime(d.checkInAt)};${fmtTime(d.checkOutAt)};${d.hoursWorked ?? ""};${d.pay ?? ""}`,
+    .flatMap((d) =>
+      d.shifts.map(
+        (s) =>
+          `${d.date};${fmtTime(s.checkInAt)};${fmtTime(s.checkOutAt)};${s.hoursWorked ?? ""};${s.pay ?? ""}`,
+      ),
     )
     .join("\n");
 

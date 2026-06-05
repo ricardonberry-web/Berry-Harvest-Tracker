@@ -490,57 +490,74 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
   const [from, setFrom] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
   const [to, setTo] = useState(format(new Date(), "yyyy-MM-dd"));
   const [rateInput, setRateInput] = useState("");
-  const [editingDay, setEditingDay] = useState(null);
+  // editingShift drives the entrada/saída modal. mode "edit" patches an existing
+  // shift by id; mode "create" adds a new shift (turno) to a day.
+  const [editingShift, setEditingShift] = useState<
+    { mode: "edit" | "create"; id: number | null } | null
+  >(null);
   const [editDate, setEditDate] = useState("");
   const [editCheckIn, setEditCheckIn] = useState("");
   const [editCheckOut, setEditCheckOut] = useState("");
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const handleEditDay = (d) => {
-    setEditingDay(d);
-    setEditDate(d.date);
-    setEditCheckIn(d.checkInAt ? format(new Date(d.checkInAt), "HH:mm") : "");
-    setEditCheckOut(d.checkOutAt ? format(new Date(d.checkOutAt), "HH:mm") : "");
+  const handleEditShift = (date: string, shift: { id: number; checkInAt: string | null; checkOutAt: string | null }) => {
+    setEditingShift({ mode: "edit", id: shift.id });
+    setEditDate(date);
+    setEditCheckIn(shift.checkInAt ? format(new Date(shift.checkInAt), "HH:mm") : "");
+    setEditCheckOut(shift.checkOutAt ? format(new Date(shift.checkOutAt), "HH:mm") : "");
+  };
+
+  const handleAddShift = (date: string) => {
+    setEditingShift({ mode: "create", id: null });
+    setEditDate(date);
+    setEditCheckIn("");
+    setEditCheckOut("");
   };
 
   const handleEditSave = async () => {
-    if (!editingDay) return;
+    if (!editingShift) return;
     if (!editDate) { toast({ title: "Data inválida", variant: "destructive" }); return; }
+    if (!editCheckIn) { toast({ title: "Entrada obrigatória", variant: "destructive" }); return; }
     try {
-      const res = await fetch(import.meta.env.VITE_API_URL + "/api/attendance/" + worker.id + "/" + editingDay.date, {
-        method: "PATCH",
+      // As horas são interpretadas na hora local do dispositivo (Europe/Lisbon no
+      // tablet) e convertidas para o instante UTC correto. A exibição usa
+      // format(new Date(iso)), reconvertendo para a hora local — round-trip sem desvio.
+      const payload = {
+        date: editDate,
+        checkInAt: editCheckIn ? new Date(editDate + "T" + editCheckIn + ":00").toISOString() : null,
+        checkOutAt: editCheckOut ? new Date(editDate + "T" + editCheckOut + ":00").toISOString() : null,
+      };
+      const url =
+        editingShift.mode === "create"
+          ? import.meta.env.VITE_API_URL + "/api/attendance/shift"
+          : import.meta.env.VITE_API_URL + "/api/attendance/shift/" + editingShift.id;
+      const res = await fetch(url, {
+        method: editingShift.mode === "create" ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // O dia pode ser alterado (editDate). As horas são reconstruídas com a
-          // nova data: a hora introduzida (ex.: "06:00") é interpretada na hora
-          // local do dispositivo (Europe/Lisbon no tablet) e convertida para o
-          // instante UTC correto. A exibição usa format(new Date(iso)) que
-          // reconverte para a hora local — round-trip sem o desvio de +1h.
-          date: editDate,
-          checkInAt: editCheckIn ? new Date(editDate + "T" + editCheckIn + ":00").toISOString() : null,
-          checkOutAt: editCheckOut ? new Date(editDate + "T" + editCheckOut + ":00").toISOString() : null,
-        }),
+        body: JSON.stringify(
+          editingShift.mode === "create" ? { workerId: worker.id, ...payload } : payload,
+        ),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        toast({ title: body.error ?? "Erro ao atualizar", variant: "destructive" });
+        toast({ title: body.error ?? "Erro ao guardar", variant: "destructive" });
         return;
       }
       await queryClient.invalidateQueries();
-      toast({ title: "Registo atualizado" });
-      setEditingDay(null);
+      toast({ title: editingShift.mode === "create" ? "Turno adicionado" : "Turno atualizado" });
+      setEditingShift(null);
     } catch {
-      toast({ title: "Erro ao atualizar", variant: "destructive" });
+      toast({ title: "Erro ao guardar", variant: "destructive" });
     }
   };
 
-  const handleDeleteDay = async (date) => {
-    if (!window.confirm("Apagar registo deste dia?")) return;
+  const handleDeleteShift = async (id: number) => {
+    if (!window.confirm("Apagar este turno?")) return;
     try {
-      await fetch(import.meta.env.VITE_API_URL + "/api/attendance/" + worker.id + "/" + date, { method: "DELETE" });
+      await fetch(import.meta.env.VITE_API_URL + "/api/attendance/shift/" + id, { method: "DELETE" });
       await queryClient.invalidateQueries();
-      toast({ title: "Registo apagado" });
+      toast({ title: "Turno apagado" });
     } catch {
       toast({ title: "Erro ao apagar", variant: "destructive" });
     }
@@ -569,10 +586,10 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
   };
 
 
-  if (editingDay) return (
+  if (editingShift) return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="bg-card w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4">
-        <h2 className="text-lg font-bold">Editar Registo</h2>
+        <h2 className="text-lg font-bold">{editingShift.mode === "create" ? "Adicionar Turno" : "Editar Turno"}</h2>
         <div>
           <label className="text-sm font-medium text-muted-foreground">Dia</label>
           <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)}
@@ -589,7 +606,7 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
             className="w-full mt-1 border border-border rounded-lg px-4 py-2 font-mono focus:outline-none focus:border-primary" />
         </div>
         <div className="flex gap-3">
-          <button onClick={() => setEditingDay(null)} className="flex-1 py-2 rounded-lg border border-border font-bold hover:bg-muted/50">Cancelar</button>
+          <button onClick={() => setEditingShift(null)} className="flex-1 py-2 rounded-lg border border-border font-bold hover:bg-muted/50">Cancelar</button>
           <button onClick={handleEditSave} className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground font-bold hover:opacity-90">Guardar</button>
         </div>
       </div>
@@ -699,6 +716,12 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
             <div className="p-12 text-center text-muted-foreground">
               <Clock className="w-12 h-12 mx-auto mb-3 opacity-20" />
               <p>Sem dias trabalhados neste período.</p>
+              <button
+                onClick={() => handleAddShift(to)}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary font-bold rounded-xl hover:bg-primary/20"
+              >
+                <Plus className="w-4 h-4" /> Adicionar turno
+              </button>
             </div>
           ) : (
             <table className="w-full text-left">
@@ -716,63 +739,86 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
                 </tr>
               </thead>
               <tbody>
-                {ts.days.map(d => (
-                  <tr key={d.date} className="border-b border-border/50 hover:bg-muted/20" data-testid={`timesheet-row-${d.date}`}>
-                    <td className="p-3 font-medium text-foreground">{fmtDate(d.date)}</td>
-                    <td className="p-3 text-center font-mono text-foreground">{fmtTime(d.checkInAt)}</td>
-                    <td className="p-3 text-center font-mono text-foreground">{fmtTime(d.checkOutAt)}</td>
-                    <td className="p-3 text-right font-bold text-foreground">{fmtHours(d.hoursWorked)}</td>
-                    <td className="p-3 text-center">
-                      {d.totalIssues > 0 ? (
-                        <div className="inline-flex items-center gap-1" title={
-                          QUALITY_ISSUES
-                            .filter(k => (d.issuesByType?.[k] ?? 0) > 0)
-                            .map(k => `${QUALITY_LABELS[k]}: ${d.issuesByType[k]}`)
-                            .join(" · ")
-                        }>
-                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-                            {d.totalIssues}
+                {ts.days.map(d => {
+                  // Cada dia pode ter vários turnos. A Data e as Ocorrências
+                  // (que são por dia) ocupam todas as linhas via rowSpan; cada
+                  // turno tem a sua própria linha de entrada/saída/horas/valor.
+                  const shifts = d.shifts ?? [];
+                  const rows = Math.max(shifts.length, 1);
+                  return shifts.map((s, idx) => (
+                    <tr key={s.id} className="border-b border-border/50 hover:bg-muted/20" data-testid={`timesheet-row-${s.id}`}>
+                      {idx === 0 && (
+                        <td className="p-3 font-medium text-foreground align-top" rowSpan={rows}>
+                          <div>{fmtDate(d.date)}</div>
+                          {rows > 1 && (
+                            <div className="text-xs text-muted-foreground mt-1">{rows} turnos · {fmtHours(d.hoursWorked)}</div>
+                          )}
+                          <button
+                            onClick={() => handleAddShift(d.date)}
+                            className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
+                            title="Adicionar turno neste dia"
+                          >
+                            <Plus className="w-3 h-3" /> turno
+                          </button>
+                        </td>
+                      )}
+                      <td className="p-3 text-center font-mono text-foreground">{fmtTime(s.checkInAt)}</td>
+                      <td className="p-3 text-center font-mono text-foreground">{fmtTime(s.checkOutAt)}</td>
+                      <td className="p-3 text-right font-bold text-foreground">{fmtHours(s.hoursWorked)}</td>
+                      {idx === 0 && (
+                        <td className="p-3 text-center align-top" rowSpan={rows}>
+                          {d.totalIssues > 0 ? (
+                            <div className="inline-flex items-center gap-1" title={
+                              QUALITY_ISSUES
+                                .filter(k => (d.issuesByType?.[k] ?? 0) > 0)
+                                .map(k => `${QUALITY_LABELS[k]}: ${d.issuesByType[k]}`)
+                                .join(" · ")
+                            }>
+                              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                                {d.totalIssues}
+                              </span>
+                              <span className="hidden sm:inline-flex gap-0.5">
+                                {QUALITY_ISSUES.map(k => {
+                                  const n = d.issuesByType?.[k] ?? 0;
+                                  if (!n) return null;
+                                  return (
+                                    <span
+                                      key={k}
+                                      className={`text-[9px] font-bold px-1 py-0.5 rounded border ${QUALITY_CHIP_CLASS[k]}`}
+                                    >
+                                      {QUALITY_SHORT[k]}
+                                    </span>
+                                  );
+                                })}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </td>
+                      )}
+                      <td className="p-3 text-right">
+                        {s.pay !== null && s.pay !== undefined ? (
+                          <span className="bg-success/10 text-success px-2.5 py-1 rounded-lg font-bold">
+                            {s.pay.toFixed(2)}
                           </span>
-                          <span className="hidden sm:inline-flex gap-0.5">
-                            {QUALITY_ISSUES.map(k => {
-                              const n = d.issuesByType?.[k] ?? 0;
-                              if (!n) return null;
-                              return (
-                                <span
-                                  key={k}
-                                  className={`text-[9px] font-bold px-1 py-0.5 rounded border ${QUALITY_CHIP_CLASS[k]}`}
-                                >
-                                  {QUALITY_SHORT[k]}
-                                </span>
-                              );
-                            })}
-                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button onClick={() => handleEditShift(d.date, s)} className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors" title="Editar turno">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleDeleteShift(s.id)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors" title="Apagar turno">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="p-3 text-right">
-                      {d.pay !== null ? (
-                        <span className="bg-success/10 text-success px-2.5 py-1 rounded-lg font-bold">
-                          {d.pay.toFixed(2)}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="p-3 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button onClick={() => handleEditDay(d)} className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors" title="Editar">
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => handleDeleteDay(d.date)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors" title="Apagar">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  ));
+                })}
               </tbody>
               {ts.days.length > 0 && (
                 <tfoot className="bg-muted/40 border-t-2 border-border sticky bottom-0">

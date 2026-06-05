@@ -66,11 +66,19 @@ router.get("/reports/daily", async (req, res): Promise<void> => {
   });
 
   // Load attendance for the day so we can compute hoursWorked / kgPorHora from real check-in/out
+  // A worker can have several shifts (entradas/saídas) per day; sum the closed
+  // shifts to get the real hours worked.
   const attendance = await db
     .select()
     .from(attendanceTable)
     .where(eq(attendanceTable.date, dateStr));
-  const attendanceByWorker = new Map(attendance.map((a) => [a.workerId, a]));
+  const hoursByWorker = new Map<string, number>();
+  for (const a of attendance) {
+    if (a.checkInAt && a.checkOutAt) {
+      const h = (new Date(a.checkOutAt).getTime() - new Date(a.checkInAt).getTime()) / 3_600_000;
+      if (h > 0) hoursByWorker.set(a.workerId, (hoursByWorker.get(a.workerId) ?? 0) + h);
+    }
+  }
 
   const totalKgAll = records.reduce((acc, r) => acc + (r.totalGrams || 0), 0) / 1000;
   const totalRecordsAll = records.reduce((acc, r) => acc + (r.totalCaixas || 0), 0);
@@ -80,15 +88,10 @@ router.get("/reports/daily", async (req, res): Promise<void> => {
     const first = r.primeiroRegisto ? new Date(r.primeiroRegisto) : null;
     const last = r.ultimoRegisto ? new Date(r.ultimoRegisto) : null;
 
-    // Prefer real attendance hours; fall back to first/last weighing as legacy estimate
-    const att = attendanceByWorker.get(r.workerId);
-    let hoursWorked: number | null = null;
-    if (att?.checkInAt) {
-      const start = new Date(att.checkInAt).getTime();
-      const end = att.checkOutAt ? new Date(att.checkOutAt).getTime() : Date.now();
-      const h = (end - start) / 3_600_000;
-      if (h > 0) hoursWorked = Math.round(h * 100) / 100;
-    }
+    // Real attendance hours = sum of all closed shifts for the day.
+    const summedHours = hoursByWorker.get(r.workerId);
+    const hoursWorked =
+      summedHours !== undefined && summedHours > 0 ? Math.round(summedHours * 100) / 100 : null;
 
     const kgPorHora =
       hoursWorked !== null && hoursWorked > 0

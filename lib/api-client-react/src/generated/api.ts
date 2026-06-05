@@ -31,6 +31,8 @@ import type {
   HealthStatus,
   ListAttendanceParams,
   ListWeighRecordsParams,
+  ShiftCreateBody,
+  ShiftUpdateBody,
   UpdateWeighRecordBody,
   UpdateWorkerBody,
   WeighRecord,
@@ -1327,6 +1329,263 @@ export const useCheckOutAll = <
   TContext
 > => {
   return useMutation(getCheckOutAllMutationOptions(options));
+};
+
+/**
+ * @summary Manually create a shift (entrada/saída) for a worker on a day
+ */
+export const getCreateAttendanceShiftUrl = () => {
+  return `/api/attendance/shift`;
+};
+
+export const createAttendanceShift = async (
+  shiftCreateBody: ShiftCreateBody,
+  options?: RequestInit,
+): Promise<AttendanceEntry> => {
+  return customFetch<AttendanceEntry>(getCreateAttendanceShiftUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(shiftCreateBody),
+  });
+};
+
+export const getCreateAttendanceShiftMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAttendanceShift>>,
+    TError,
+    { data: BodyType<ShiftCreateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createAttendanceShift>>,
+  TError,
+  { data: BodyType<ShiftCreateBody> },
+  TContext
+> => {
+  const mutationKey = ["createAttendanceShift"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createAttendanceShift>>,
+    { data: BodyType<ShiftCreateBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createAttendanceShift(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateAttendanceShiftMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createAttendanceShift>>
+>;
+export type CreateAttendanceShiftMutationBody = BodyType<ShiftCreateBody>;
+export type CreateAttendanceShiftMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Manually create a shift (entrada/saída) for a worker on a day
+ */
+export const useCreateAttendanceShift = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAttendanceShift>>,
+    TError,
+    { data: BodyType<ShiftCreateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createAttendanceShift>>,
+  TError,
+  { data: BodyType<ShiftCreateBody> },
+  TContext
+> => {
+  return useMutation(getCreateAttendanceShiftMutationOptions(options));
+};
+
+/**
+ * @summary Edit a shift's times or move it to another day
+ */
+export const getUpdateAttendanceShiftUrl = (id: number) => {
+  return `/api/attendance/shift/${id}`;
+};
+
+export const updateAttendanceShift = async (
+  id: number,
+  shiftUpdateBody: ShiftUpdateBody,
+  options?: RequestInit,
+): Promise<AttendanceEntry> => {
+  return customFetch<AttendanceEntry>(getUpdateAttendanceShiftUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(shiftUpdateBody),
+  });
+};
+
+export const getUpdateAttendanceShiftMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAttendanceShift>>,
+    TError,
+    { id: number; data: BodyType<ShiftUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAttendanceShift>>,
+  TError,
+  { id: number; data: BodyType<ShiftUpdateBody> },
+  TContext
+> => {
+  const mutationKey = ["updateAttendanceShift"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAttendanceShift>>,
+    { id: number; data: BodyType<ShiftUpdateBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateAttendanceShift(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAttendanceShiftMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAttendanceShift>>
+>;
+export type UpdateAttendanceShiftMutationBody = BodyType<ShiftUpdateBody>;
+export type UpdateAttendanceShiftMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Edit a shift's times or move it to another day
+ */
+export const useUpdateAttendanceShift = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAttendanceShift>>,
+    TError,
+    { id: number; data: BodyType<ShiftUpdateBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAttendanceShift>>,
+  TError,
+  { id: number; data: BodyType<ShiftUpdateBody> },
+  TContext
+> => {
+  return useMutation(getUpdateAttendanceShiftMutationOptions(options));
+};
+
+/**
+ * @summary Delete a shift by id
+ */
+export const getDeleteAttendanceShiftUrl = (id: number) => {
+  return `/api/attendance/shift/${id}`;
+};
+
+export const deleteAttendanceShift = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteAttendanceShiftUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteAttendanceShiftMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAttendanceShift>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteAttendanceShift>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteAttendanceShift"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteAttendanceShift>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteAttendanceShift(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteAttendanceShiftMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteAttendanceShift>>
+>;
+
+export type DeleteAttendanceShiftMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete a shift by id
+ */
+export const useDeleteAttendanceShift = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAttendanceShift>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteAttendanceShift>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteAttendanceShiftMutationOptions(options));
 };
 
 /**

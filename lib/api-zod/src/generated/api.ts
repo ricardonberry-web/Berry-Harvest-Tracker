@@ -297,6 +297,55 @@ export const CheckOutAllResponseItem = zod.object({
 export const CheckOutAllResponse = zod.array(CheckOutAllResponseItem);
 
 /**
+ * @summary Manually create a shift (entrada/saída) for a worker on a day
+ */
+export const CreateAttendanceShiftBody = zod.object({
+  workerId: zod.string(),
+  date: zod.string().describe("ISO date YYYY-MM-DD"),
+  checkInAt: zod.date(),
+  checkOutAt: zod.date().nullish(),
+});
+
+/**
+ * @summary Edit a shift's times or move it to another day
+ */
+export const UpdateAttendanceShiftParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateAttendanceShiftBody = zod
+  .object({
+    date: zod
+      .string()
+      .optional()
+      .describe("Move the shift to this ISO date YYYY-MM-DD"),
+    checkInAt: zod.date().optional(),
+    checkOutAt: zod.date().nullish(),
+  })
+  .describe("All fields optional; omit a field to leave it unchanged.");
+
+export const UpdateAttendanceShiftResponse = zod.object({
+  workerId: zod.string(),
+  workerName: zod.string(),
+  date: zod.string().describe("ISO date YYYY-MM-DD"),
+  checkInAt: zod.date().nullable(),
+  checkOutAt: zod.date().nullable(),
+  hoursWorked: zod
+    .number()
+    .nullable()
+    .describe(
+      "Hours between check-in and check-out (null if not yet checked out)",
+    ),
+});
+
+/**
+ * @summary Delete a shift by id
+ */
+export const DeleteAttendanceShiftParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
  * @summary Get attendance days for a worker in a date range, with hours and pay
  */
 export const GetWorkerTimesheetParams = zod.object({
@@ -327,9 +376,20 @@ export const GetWorkerTimesheetResponse = zod.object({
   days: zod.array(
     zod.object({
       date: zod.string(),
-      checkInAt: zod.string().nullable(),
-      checkOutAt: zod.string().nullable(),
-      hoursWorked: zod.number().nullable(),
+      checkInAt: zod
+        .string()
+        .nullable()
+        .describe("First check-in of the day (aggregate over all shifts)."),
+      checkOutAt: zod
+        .string()
+        .nullable()
+        .describe(
+          "Last check-out of the day, or null if any shift is still open.",
+        ),
+      hoursWorked: zod
+        .number()
+        .nullable()
+        .describe("Sum of hoursWorked across the day's closed shifts."),
       pay: zod
         .number()
         .nullable()
@@ -346,6 +406,24 @@ export const GetWorkerTimesheetResponse = zod.object({
           OUTROS: zod.number(),
         })
         .describe("Per-type counts of quality occurrences"),
+      shifts: zod.array(
+        zod
+          .object({
+            id: zod.number(),
+            checkInAt: zod.string().nullable(),
+            checkOutAt: zod.string().nullable(),
+            hoursWorked: zod.number().nullable(),
+            pay: zod
+              .number()
+              .nullable()
+              .describe(
+                "hoursWorked \* hourlyRate for this shift (null if either is missing)",
+              ),
+          })
+          .describe(
+            "A single entrada\/saída (shift) within a day. A day can have several.",
+          ),
+      ),
     }),
   ),
   totalDays: zod.number().describe("Number of days with at least a check-in"),

@@ -385,6 +385,105 @@ paths:
                 items:
                   $ref: "#/components/schemas/AttendanceEntry"
 
+  /attendance/shift:
+    post:
+      operationId: createAttendanceShift
+      tags: [attendance]
+      summary: Manually create a shift (entrada/saída) for a worker on a day
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShiftCreateBody"
+      responses:
+        "201":
+          description: The created shift
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceEntry"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Worker not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Shift conflict (overlap or open shift already exists)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /attendance/shift/{id}:
+    patch:
+      operationId: updateAttendanceShift
+      tags: [attendance]
+      summary: Edit a shift's times or move it to another day
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShiftUpdateBody"
+      responses:
+        "200":
+          description: The updated shift
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceEntry"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Shift not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Shift conflict (overlap or open shift already exists)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteAttendanceShift
+      tags: [attendance]
+      summary: Delete a shift by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Shift deleted
+        "404":
+          description: Shift not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /workers/{id}/timesheet:
     get:
       operationId: getWorkerTimesheet
@@ -722,11 +821,12 @@ components:
         - totalIssues
         - issuesByType
 
-    WorkerTimesheetDay:
+    WorkerTimesheetShift:
       type: object
+      description: A single entrada/saída (shift) within a day. A day can have several.
       properties:
-        date:
-          type: string
+        id:
+          type: integer
         checkInAt:
           type: ["string", "null"]
         checkOutAt:
@@ -735,12 +835,40 @@ components:
           type: ["number", "null"]
         pay:
           type: ["number", "null"]
+          description: hoursWorked * hourlyRate for this shift (null if either is missing)
+      required:
+        - id
+        - checkInAt
+        - checkOutAt
+        - hoursWorked
+        - pay
+
+    WorkerTimesheetDay:
+      type: object
+      properties:
+        date:
+          type: string
+        checkInAt:
+          type: ["string", "null"]
+          description: First check-in of the day (aggregate over all shifts).
+        checkOutAt:
+          type: ["string", "null"]
+          description: Last check-out of the day, or null if any shift is still open.
+        hoursWorked:
+          type: ["number", "null"]
+          description: Sum of hoursWorked across the day's closed shifts.
+        pay:
+          type: ["number", "null"]
           description: hoursWorked * hourlyRate (null if either is missing)
         totalIssues:
           type: integer
           description: Number of quality flags reported on this day.
         issuesByType:
           $ref: "#/components/schemas/QualityIssueCounts"
+        shifts:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkerTimesheetShift"
       required:
         - date
         - checkInAt
@@ -749,6 +877,7 @@ components:
         - pay
         - totalIssues
         - issuesByType
+        - shifts
 
     WorkerTimesheet:
       type: object
@@ -834,6 +963,39 @@ components:
           description: Restrict the bulk action to these worker IDs (defaults to all active workers)
           items:
             type: string
+
+    ShiftCreateBody:
+      type: object
+      properties:
+        workerId:
+          type: string
+        date:
+          type: string
+          description: ISO date YYYY-MM-DD
+        checkInAt:
+          type: string
+          format: date-time
+        checkOutAt:
+          type: ["string", "null"]
+          format: date-time
+      required:
+        - workerId
+        - date
+        - checkInAt
+
+    ShiftUpdateBody:
+      type: object
+      description: All fields optional; omit a field to leave it unchanged.
+      properties:
+        date:
+          type: string
+          description: Move the shift to this ISO date YYYY-MM-DD
+        checkInAt:
+          type: string
+          format: date-time
+        checkOutAt:
+          type: ["string", "null"]
+          format: date-time
 
     DailyReport:
       type: object

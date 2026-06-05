@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { workersTable } from "./workers";
@@ -14,7 +14,9 @@ export const attendanceTable = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    workerDayUnique: uniqueIndex("worker_attendance_worker_day_uniq").on(t.workerId, t.date),
+    // Multiple shifts (entradas/saídas) per worker per day are allowed, so this
+    // is a plain (non-unique) index to keep per-worker/day lookups fast.
+    workerDayIdx: index("worker_attendance_worker_day_idx").on(t.workerId, t.date),
   }),
 );
 

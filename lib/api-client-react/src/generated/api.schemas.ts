@@ -114,13 +114,40 @@ export interface WorkerDailyStats {
   issuesByType: QualityIssueCounts;
 }
 
-export interface WorkerTimesheetDay {
-  date: string;
+/**
+ * A single entrada/saída (shift) within a day. A day can have several.
+ */
+export interface WorkerTimesheetShift {
+  id: number;
   /** @nullable */
   checkInAt: string | null;
   /** @nullable */
   checkOutAt: string | null;
   /** @nullable */
+  hoursWorked: number | null;
+  /**
+   * hoursWorked * hourlyRate for this shift (null if either is missing)
+   * @nullable
+   */
+  pay: number | null;
+}
+
+export interface WorkerTimesheetDay {
+  date: string;
+  /**
+   * First check-in of the day (aggregate over all shifts).
+   * @nullable
+   */
+  checkInAt: string | null;
+  /**
+   * Last check-out of the day, or null if any shift is still open.
+   * @nullable
+   */
+  checkOutAt: string | null;
+  /**
+   * Sum of hoursWorked across the day's closed shifts.
+   * @nullable
+   */
   hoursWorked: number | null;
   /**
    * hoursWorked * hourlyRate (null if either is missing)
@@ -130,6 +157,7 @@ export interface WorkerTimesheetDay {
   /** Number of quality flags reported on this day. */
   totalIssues: number;
   issuesByType: QualityIssueCounts;
+  shifts: WorkerTimesheetShift[];
 }
 
 export interface WorkerTimesheet {
@@ -174,6 +202,26 @@ export interface AttendanceBulkBody {
   date?: string;
   /** Restrict the bulk action to these worker IDs (defaults to all active workers) */
   workerIds?: string[];
+}
+
+export interface ShiftCreateBody {
+  workerId: string;
+  /** ISO date YYYY-MM-DD */
+  date: string;
+  checkInAt: string;
+  /** @nullable */
+  checkOutAt?: string | null;
+}
+
+/**
+ * All fields optional; omit a field to leave it unchanged.
+ */
+export interface ShiftUpdateBody {
+  /** Move the shift to this ISO date YYYY-MM-DD */
+  date?: string;
+  checkInAt?: string;
+  /** @nullable */
+  checkOutAt?: string | null;
 }
 
 export interface DailyReport {

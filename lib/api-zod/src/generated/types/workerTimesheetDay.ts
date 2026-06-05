@@ -6,14 +6,24 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { QualityIssueCounts } from "./qualityIssueCounts";
+import type { WorkerTimesheetShift } from "./workerTimesheetShift";
 
 export interface WorkerTimesheetDay {
   date: string;
-  /** @nullable */
+  /**
+   * First check-in of the day (aggregate over all shifts).
+   * @nullable
+   */
   checkInAt: string | null;
-  /** @nullable */
+  /**
+   * Last check-out of the day, or null if any shift is still open.
+   * @nullable
+   */
   checkOutAt: string | null;
-  /** @nullable */
+  /**
+   * Sum of hoursWorked across the day's closed shifts.
+   * @nullable
+   */
   hoursWorked: number | null;
   /**
    * hoursWorked * hourlyRate (null if either is missing)
@@ -23,4 +33,5 @@ export interface WorkerTimesheetDay {
   /** Number of quality flags reported on this day. */
   totalIssues: number;
   issuesByType: QualityIssueCounts;
+  shifts: WorkerTimesheetShift[];
 }
