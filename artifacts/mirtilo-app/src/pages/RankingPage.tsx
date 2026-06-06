@@ -171,6 +171,12 @@ export default function RankingPage() {
               <button onClick={() => { setDateFrom(format(new Date(Date.now() - 6*86400000), "yyyy-MM-dd")); setDateTo(format(new Date(), "yyyy-MM-dd")); }} className="px-3 py-1 text-xs font-bold bg-muted text-muted-foreground rounded-lg hover:bg-muted/70">7 dias</button>
               <button onClick={() => { setDateFrom(format(new Date(Date.now() - 29*86400000), "yyyy-MM-dd")); setDateTo(format(new Date(), "yyyy-MM-dd")); }} className="px-3 py-1 text-xs font-bold bg-muted text-muted-foreground rounded-lg hover:bg-muted/70">30 dias</button>
             </div>
+            <div className="flex gap-2 flex-wrap mt-1">
+              <span className="text-xs font-bold text-muted-foreground self-center">Período:</span>
+              <button onClick={() => setPeriod("all")} className={"px-3 py-1 text-xs font-bold rounded-lg " + (period === "all" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70")}>Dia todo</button>
+              <button onClick={() => setPeriod("morning")} className={"px-3 py-1 text-xs font-bold rounded-lg " + (period === "morning" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70")}>Manhã (00-13h)</button>
+              <button onClick={() => setPeriod("afternoon")} className={"px-3 py-1 text-xs font-bold rounded-lg " + (period === "afternoon" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70")}>Tarde (14-23h)</button>
+            </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
