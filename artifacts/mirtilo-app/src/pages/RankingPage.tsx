@@ -38,6 +38,7 @@ export default function RankingPage() {
 
   const [report, setReport] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [period, setPeriod] = useState("all");
 
   useEffect(() => {
     setIsLoading(true);
