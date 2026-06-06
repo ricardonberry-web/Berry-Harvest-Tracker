@@ -41,7 +41,7 @@ export default function RankingPage() {
 
   useEffect(() => {
     setIsLoading(true);
-    fetch(import.meta.env.VITE_API_URL + "/api/reports/range?from=" + dateFrom + "&to=" + dateTo)
+    fetch(import.meta.env.VITE_API_URL + "/api/reports/range?from=" + dateFrom + "&to=" + dateTo + (period === 'morning' ? '&fromHour=00&toHour=13' : period === 'afternoon' ? '&fromHour=14&toHour=23' : ''))
       .then(r => r.json())
       .then(data => { setReport(data); setIsLoading(false); })
       .catch(() => setIsLoading(false));

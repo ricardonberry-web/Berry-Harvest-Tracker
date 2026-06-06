@@ -191,7 +191,7 @@ router.get("/reports/export", async (req, res): Promise<void> => {
 
 
 router.get("/reports/range", async (req, res) => {
-  const { from, to } = req.query;
+  const { from, to, fromHour, toHour } = req.query as Record<string, string>;
   if (!from || !to) { res.status(400).json({ error: "from and to required" }); return; }
   const records = await db.select({
     workerId: weighRecordsTable.workerId,
@@ -201,7 +201,9 @@ router.get("/reports/range", async (req, res) => {
     mediaGrPorCaixa: sql`avg(${weighRecordsTable.weightGrams})::float`,
   }).from(weighRecordsTable)
     .leftJoin(workersTable, eq(weighRecordsTable.workerId, workersTable.id))
-    .where(sql`(${weighRecordsTable.timestamp} AT TIME ZONE ${BUSINESS_TZ})::date BETWEEN ${from}::date AND ${to}::date`)
+    .where(fromHour && toHour
+      ? sql`(${weighRecordsTable.timestamp} AT TIME ZONE ${BUSINESS_TZ})::date BETWEEN ${from}::date AND ${to}::date AND (${weighRecordsTable.timestamp} AT TIME ZONE ${BUSINESS_TZ})::time BETWEEN ${fromHour + ':00'}::time AND ${toHour + ':59'}::time`
+      : sql`(${weighRecordsTable.timestamp} AT TIME ZONE ${BUSINESS_TZ})::date BETWEEN ${from}::date AND ${to}::date`)
     .groupBy(weighRecordsTable.workerId, workersTable.name)
     .orderBy(sql`sum(${weighRecordsTable.weightGrams}) desc`);
 
