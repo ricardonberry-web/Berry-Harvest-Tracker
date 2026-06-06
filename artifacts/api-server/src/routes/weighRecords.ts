@@ -112,21 +112,23 @@ router.post("/weigh-records", async (req, res): Promise<void> => {
     return;
   }
 
-  // Reject if worker hasn't checked in today (or has already checked out)
+  // Reject if worker hasn't checked in today (or every shift is already closed > 1h ago).
+  // A worker may have several shifts per day, so look at all of them: any open shift
+  // means the worker is currently working; otherwise honour a 1h grace after the last check-out.
   const recordDate = todayISO(timestamp ? new Date(timestamp) : new Date());
-  const [att] = await db
+  const shifts = await db
     .select()
     .from(attendanceTable)
     .where(and(eq(attendanceTable.workerId, workerId), eq(attendanceTable.date, recordDate)));
-  if (!att) {
+  if (shifts.length === 0) {
     res.status(403).json({ error: "Trabalhador sem entrada registada para hoje." });
     return;
   }
-  if (att.checkOutAt) {
-    const checkOutTime = new Date(att.checkOutAt).getTime();
-    const now = Date.now();
+  const hasOpenShift = shifts.some((s) => !s.checkOutAt);
+  if (!hasOpenShift) {
+    const lastCheckOut = Math.max(...shifts.map((s) => new Date(s.checkOutAt as Date).getTime()));
     const oneHour = 60 * 60 * 1000;
-    if (now - checkOutTime > oneHour) {
+    if (Date.now() - lastCheckOut > oneHour) {
       res.status(403).json({ error: "Trabalhador já deu saída há mais de 1 hora — registe nova entrada para pesar." });
       return;
     }

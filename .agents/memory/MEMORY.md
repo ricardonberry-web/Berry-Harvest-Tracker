@@ -1,1 +1,2 @@
 - [Codegen → declaration rebuild](codegen-project-references.md) — after orval codegen, rebuild api-client-react declarations or consumers typecheck against stale dist .d.ts via TS project references.
+- [Multi-shift single-row reads](multi-shift-single-row-reads.md) — after allowing multiple attendance rows/day, any `[att] = select(workerId,date)` is a bug; must aggregate all shifts (e.g. weighing gate).
