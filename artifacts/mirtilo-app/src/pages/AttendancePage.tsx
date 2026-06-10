@@ -57,6 +57,7 @@ export default function AttendancePage() {
   const [bulkCheckIn, setBulkCheckIn] = useState("");
   const [bulkCheckOut, setBulkCheckOut] = useState("");
   const [bulkEditBusy, setBulkEditBusy] = useState(false);
+  const [selectedShiftIds, setSelectedShiftIds] = useState<Set<number>>(new Set());
 
   const { data: entries = [], refetch, isFetching } = useListAttendance(undefined, {
     query: { refetchInterval: 30_000 } as any,
@@ -418,7 +419,12 @@ export default function AttendancePage() {
                   <Plus className="w-4 h-4" /> Adicionar
                 </button>
                 <button
-                  onClick={() => setBulkEditOpen(true)}
+                  onClick={() => {
+                    if (selectedShiftIds.size === 0) {
+                      setSelectedShiftIds(new Set(shifts.map(s => s.id ?? 0)));
+                    }
+                    setBulkEditOpen(true);
+                  }}
                   disabled={shifts.length === 0}
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
                 >
@@ -444,6 +450,20 @@ export default function AttendancePage() {
                 <table className="w-full text-left">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>
+                      <th className="p-3">
+                        <button
+                          onClick={() => {
+                            const all = new Set(shifts.map(s => s.id ?? 0));
+                            setSelectedShiftIds(prev => prev.size === all.size ? new Set() : all);
+                          }}
+                          className="text-xs font-bold text-muted-foreground hover:text-foreground flex items-center gap-1"
+                        >
+                          {selectedShiftIds.size === shifts.length
+                            ? <><CheckSquare className="w-4 h-4 text-primary" /> Desmarcar</>
+                            : <><Square className="w-4 h-4" /> Todos</>
+                          }
+                        </button>
+                      </th>
                       <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground">Trabalhador</th>
                       <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground text-center">Entrada</th>
                       <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground text-center">Saída</th>
@@ -452,27 +472,48 @@ export default function AttendancePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {shifts.map((s) => (
-                      <tr key={s.id} className="border-b border-border/50 hover:bg-muted/20">
-                        <td className="p-3">
-                          <p className="font-bold text-foreground">{s.workerName}</p>
-                          <p className="text-xs text-muted-foreground font-mono">{s.workerId}</p>
-                        </td>
-                        <td className="p-3 text-center font-mono text-foreground">{fmtTime(s.checkInAt)}</td>
-                        <td className="p-3 text-center font-mono text-foreground">{fmtTime(s.checkOutAt)}</td>
-                        <td className="p-3 text-right font-bold text-foreground">{fmtHours(s.hoursWorked)}</td>
-                        <td className="p-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button onClick={() => handleEditShift(s)} className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors" title="Editar turno">
-                              <Pencil className="w-4 h-4" />
+                    {shifts.map((s) => {
+                      const isChecked = selectedShiftIds.has(s.id ?? 0);
+                      return (
+                        <tr key={s.id} className="border-b border-border/50 hover:bg-muted/20">
+                          <td className="p-3">
+                            <button
+                              onClick={() => {
+                                setSelectedShiftIds(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(s.id ?? 0)) next.delete(s.id ?? 0);
+                                  else next.add(s.id ?? 0);
+                                  return next;
+                                });
+                              }}
+                              className="text-muted-foreground hover:text-foreground"
+                            >
+                              {isChecked
+                                ? <CheckSquare className="w-5 h-5 text-primary" />
+                                : <Square className="w-5 h-5" />
+                              }
                             </button>
-                            <button onClick={() => handleDeleteShift(s.id ?? 0)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors" title="Apagar turno">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="p-3">
+                            <p className="font-bold text-foreground">{s.workerName}</p>
+                            <p className="text-xs text-muted-foreground font-mono">{s.workerId}</p>
+                          </td>
+                          <td className="p-3 text-center font-mono text-foreground">{fmtTime(s.checkInAt)}</td>
+                          <td className="p-3 text-center font-mono text-foreground">{fmtTime(s.checkOutAt)}</td>
+                          <td className="p-3 text-right font-bold text-foreground">{fmtHours(s.hoursWorked)}</td>
+                          <td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <button onClick={() => handleEditShift(s)} className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors" title="Editar turno">
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => handleDeleteShift(s.id ?? 0)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors" title="Apagar turno">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
@@ -484,9 +525,56 @@ export default function AttendancePage() {
       {/* Bulk Edit Modal */}
       {bulkEditOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-card w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4">
+          <div className="bg-card w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold">Alterar Horários do Dia</h2>
-            <p className="text-xs text-muted-foreground">Aplica a <strong>{shifts.length}</strong> turnos em {new Set(shifts.map(s => s.workerId)).size} trabalhadores.</p>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Aplica a <strong>{selectedShiftIds.size}</strong> de {shifts.length} turno{shifts.length === 1 ? "" : "s"}</span>
+              <button
+                onClick={() => {
+                  const all = new Set(shifts.map(s => s.id ?? 0));
+                  setSelectedShiftIds(prev => prev.size === all.size ? new Set() : all);
+                }}
+                className="text-primary font-bold hover:underline"
+              >
+                {selectedShiftIds.size === shifts.length ? "Desmarcar todos" : "Seleccionar todos"}
+              </button>
+            </div>
+            {/* Lista de turnos dentro do modal */}
+            <div className="border border-border rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+              <table className="w-full text-left text-sm">
+                <tbody>
+                  {shifts.map((s) => {
+                    const isChecked = selectedShiftIds.has(s.id ?? 0);
+                    return (
+                      <tr key={s.id} className="border-b border-border/50 hover:bg-muted/20">
+                        <td className="p-2">
+                          <button
+                            onClick={() => {
+                              setSelectedShiftIds(prev => {
+                                const next = new Set(prev);
+                                if (next.has(s.id ?? 0)) next.delete(s.id ?? 0);
+                                else next.add(s.id ?? 0);
+                                return next;
+                              });
+                            }}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            {isChecked
+                              ? <CheckSquare className="w-5 h-5 text-primary" />
+                              : <Square className="w-5 h-5" />
+                            }
+                          </button>
+                        </td>
+                        <td className="p-2 font-bold text-foreground">{s.workerName}</td>
+                        <td className="p-2 text-muted-foreground font-mono">{s.workerId}</td>
+                        <td className="p-2 text-center font-mono text-muted-foreground">{fmtTime(s.checkInAt)}</td>
+                        <td className="p-2 text-center font-mono text-muted-foreground">{fmtTime(s.checkOutAt)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
             <div>
               <label className="text-sm font-medium text-muted-foreground">Nova Entrada</label>
               <input type="time" value={bulkCheckIn} onChange={e => setBulkCheckIn(e.target.value)}
@@ -501,15 +589,21 @@ export default function AttendancePage() {
               <button onClick={() => setBulkEditOpen(false)} className="flex-1 py-2 rounded-lg border border-border font-bold hover:bg-muted/50">Cancelar</button>
               <button
                 onClick={async () => {
+                  const validIds = new Set(shifts.map(s => s.id ?? 0));
+                  const ids = Array.from(selectedShiftIds).filter(id => validIds.has(id));
+                  if (ids.length === 0) {
+                    toast({ title: "Nenhum turno seleccionado", variant: "destructive" });
+                    return;
+                  }
                   if (!bulkCheckIn && !bulkCheckOut) {
                     toast({ title: "Nada a alterar", variant: "destructive" });
                     return;
                   }
-                  if (!window.confirm(`Alterar horários de ${shifts.length} turnos?\n\nEntrada: ${bulkCheckIn || "—"}\nSaída: ${bulkCheckOut || "—"}`)) return;
+                  if (!window.confirm(`Alterar horários de ${ids.length} turno${ids.length === 1 ? "" : "s"}?\n\nEntrada: ${bulkCheckIn || "—"}\nSaída: ${bulkCheckOut || "—"}`)) return;
                   setBulkEditBusy(true);
                   try {
                     const body: Record<string, unknown> = {
-                      shiftIds: shifts.map(s => s.id),
+                      shiftIds: ids,
                       date: shiftDate,
                     };
                     if (bulkCheckIn) body.checkInAt = new Date(shiftDate + "T" + bulkCheckIn + ":00").toISOString();
@@ -529,7 +623,8 @@ export default function AttendancePage() {
                     setBulkEditOpen(false);
                     setBulkCheckIn("");
                     setBulkCheckOut("");
-                    toast({ title: "Horários alterados", description: `${shifts.length} turnos actualizados.` });
+                    setSelectedShiftIds(new Set());
+                    toast({ title: "Horários alterados", description: `${ids.length} turno${ids.length === 1 ? "" : "s"} actualizado${ids.length === 1 ? "" : "s"}.` });
                     await refetch();
                     await refetchShifts();
                   } catch {
