@@ -386,6 +386,32 @@ paths:
                   $ref: "#/components/schemas/AttendanceEntry"
 
   /attendance/shift:
+    get:
+      operationId: listAttendanceShifts
+      tags: [attendance]
+      summary: List all individual shifts for a day (not aggregated)
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+          description: ISO date YYYY-MM-DD (defaults to today)
+      responses:
+        "200":
+          description: List of individual attendance shifts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceEntry"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       operationId: createAttendanceShift
       tags: [attendance]
@@ -917,6 +943,9 @@ components:
     AttendanceEntry:
       type: object
       properties:
+        id:
+          type: ["integer", "null"]
+          description: Shift id (null for aggregated entries)
         workerId:
           type: string
         workerName:
@@ -933,13 +962,18 @@ components:
         hoursWorked:
           type: ["number", "null"]
           description: Hours between check-in and check-out (null if not yet checked out)
+        shiftsCount:
+          type: ["integer", "null"]
+          description: Number of shifts in the day (aggregated entries only)
       required:
+        - id
         - workerId
         - workerName
         - date
         - checkInAt
         - checkOutAt
         - hoursWorked
+        - shiftsCount
 
     AttendanceMutationBody:
       type: object

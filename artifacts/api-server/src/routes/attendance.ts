@@ -87,6 +87,7 @@ function aggregateWorkerDay(
   const hoursWorked = hasClosed ? Number((closedMs / 3_600_000).toFixed(2)) : null;
 
   return {
+    id: null,
     workerId,
     workerName,
     date,
@@ -170,6 +171,35 @@ async function loadEntriesForDate(date: string) {
 router.get("/attendance", async (req, res): Promise<void> => {
   const date = normaliseDate(req.query.date);
   const entries = await loadEntriesForDate(date);
+  res.json(entries);
+});
+
+// List all individual shifts for a day (not aggregated).
+router.get("/attendance/shift", async (req, res): Promise<void> => {
+  const date = normaliseDate(req.query.date);
+  const rows = await db
+    .select()
+    .from(attendanceTable)
+    .where(eq(attendanceTable.date, date))
+    .orderBy(attendanceTable.workerId, attendanceTable.checkInAt);
+
+  const workerIds = [...new Set(rows.map((r) => r.workerId))];
+  const workers = workerIds.length
+    ? await db.select().from(workersTable).where(inArray(workersTable.id, workerIds))
+    : [];
+  const workerNames = new Map(workers.map((w) => [w.id, w.name]));
+
+  const entries = rows.map((a) =>
+    serialiseEntry({
+      id: a.id,
+      workerId: a.workerId,
+      workerName: workerNames.get(a.workerId) ?? a.workerId,
+      date: a.date,
+      checkInAt: a.checkInAt,
+      checkOutAt: a.checkOutAt,
+    }),
+  );
+
   res.json(entries);
 });
 
@@ -507,6 +537,72 @@ router.patch("/attendance/shift/:id", async (req, res): Promise<void> => {
       checkOutAt: updated.checkOutAt,
     }),
   );
+});
+
+// Bulk update: apply the same checkIn/checkOut (and optionally date) to all
+// shifts in a single day.  This is useful when the schedule changes for a whole
+// team (e.g. rain delay, change of working hours).
+router.post("/attendance/shift/bulk-update", async (req, res): Promise<void> => {
+  const { date: newDate, shiftIds, checkInAt, checkOutAt } = req.body ?? {};
+  if (!Array.isArray(shiftIds) || shiftIds.length === 0) {
+    res.status(400).json({ error: "shiftIds array is required" });
+    return;
+  }
+  const ids = shiftIds.map((x: unknown) => Number(x)).filter((n: number) => Number.isInteger(n));
+  if (ids.length === 0) {
+    res.status(400).json({ error: "shiftIds array is required" });
+    return;
+  }
+
+  const updateData: Record<string, unknown> = {};
+  let ci: Date | null = null;
+  let co: Date | null = null;
+
+  if (checkInAt !== undefined) {
+    ci = new Date(checkInAt);
+    if (Number.isNaN(ci.getTime())) {
+      res.status(400).json({ error: "Entrada inválida" });
+      return;
+    }
+    updateData.checkInAt = ci;
+  }
+  if (checkOutAt !== undefined) {
+    if (!checkOutAt) {
+      updateData.checkOutAt = null;
+    } else {
+      co = new Date(checkOutAt);
+      if (Number.isNaN(co.getTime())) {
+        res.status(400).json({ error: "Saída inválida" });
+        return;
+      }
+      updateData.checkOutAt = co;
+    }
+  }
+  if (newDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+      res.status(400).json({ error: "Data inválida (formato AAAA-MM-DD)" });
+      return;
+    }
+    updateData.date = newDate;
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    res.status(400).json({ error: "Nenhum campo a alterar (forneça checkInAt, checkOutAt ou date)" });
+    return;
+  }
+
+  if (ci && co && co.getTime() <= ci.getTime()) {
+    res.status(400).json({ error: "A saída deve ser posterior à entrada" });
+    return;
+  }
+
+  const updated = await db
+    .update(attendanceTable)
+    .set(updateData)
+    .where(inArray(attendanceTable.id, ids))
+    .returning();
+
+  res.json({ updated: updated.length });
 });
 
 // Delete a single shift by its id.

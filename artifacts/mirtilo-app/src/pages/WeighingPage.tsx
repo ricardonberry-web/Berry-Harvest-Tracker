@@ -52,7 +52,7 @@ export default function WeighingPage() {
 
   const { data: workers = [] } = useListWorkers();
   const { data: attendance = [] } = useListAttendance(undefined, {
-    query: { refetchInterval: 30_000 },
+    query: { refetchInterval: 30_000 } as any,
   });
 
   const checkedInIds = useMemo(
@@ -66,7 +66,7 @@ export default function WeighingPage() {
   const todayISO = format(new Date(), "yyyy-MM-dd");
   const { data: todayRecords = [], refetch: refetchRecords } = useListWeighRecords(
     { workerId: activeWorkerId || undefined, date: todayISO, limit: 50 },
-    { query: { enabled: !!activeWorkerId } },
+    { query: { enabled: !!activeWorkerId } as any },
   );
 
   const createRecord = useCreateWeighRecord();

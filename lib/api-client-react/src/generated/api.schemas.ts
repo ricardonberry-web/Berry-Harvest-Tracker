@@ -176,6 +176,11 @@ export interface WorkerTimesheet {
 }
 
 export interface AttendanceEntry {
+  /**
+   * Shift id (null for aggregated entries)
+   * @nullable
+   */
+  id: number | null;
   workerId: string;
   workerName: string;
   /** ISO date YYYY-MM-DD */
@@ -189,6 +194,11 @@ export interface AttendanceEntry {
    * @nullable
    */
   hoursWorked: number | null;
+  /**
+   * Number of shifts in the day (aggregated entries only)
+   * @nullable
+   */
+  shiftsCount: number | null;
 }
 
 export interface AttendanceMutationBody {
@@ -241,6 +251,13 @@ export type ListWeighRecordsParams = {
 };
 
 export type ListAttendanceParams = {
+  /**
+   * ISO date YYYY-MM-DD (defaults to today)
+   */
+  date?: string;
+};
+
+export type ListAttendanceShiftsParams = {
   /**
    * ISO date YYYY-MM-DD (defaults to today)
    */

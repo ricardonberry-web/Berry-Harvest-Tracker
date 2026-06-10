@@ -47,7 +47,7 @@ export default function RankingPage() {
       .then(data => { setReport(data); setIsLoading(false); })
       .catch(() => setIsLoading(false));
   }, [dateFrom, dateTo]);
-  const { data: allRecords = [], isLoading: recordsLoading } = useListWeighRecords({ date: dateFrom }, { query: { keepPreviousData: true } });
+  const { data: allRecords = [], isLoading: recordsLoading } = useListWeighRecords({ date: dateFrom }, { query: { keepPreviousData: true } as any });
 
   const hourRangeInverted = useMemo(() => {
     const [fh, fm] = hourFrom.split(":").map(Number);

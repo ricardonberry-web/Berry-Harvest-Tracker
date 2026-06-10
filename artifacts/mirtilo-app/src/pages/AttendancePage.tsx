@@ -2,15 +2,27 @@ import { useMemo, useState } from "react";
 import { Layout } from "@/components/Layout";
 import {
   useListAttendance,
+  useListWorkers,
+  useListAttendanceShifts,
   useCheckInAll,
   useCheckOutAll,
 } from "@workspace/api-client-react";
 import {
   LogIn, LogOut, Users, Clock, CheckCircle2, Circle, Hourglass, RefreshCw, CheckSquare, Square,
+  Plus, Pencil, Trash2, X, Calendar as CalendarIcon,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useBeep } from "@/hooks/use-beep";
+import { useQueryClient } from "@tanstack/react-query";
+
+function todayISO() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 
 function fmtTime(iso: string | null) {
   if (!iso) return "—";
@@ -27,12 +39,35 @@ function fmtHours(h: number | null) {
 export default function AttendancePage() {
   const { toast } = useToast();
   const beep = useBeep();
+  const queryClient = useQueryClient();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState<"in" | "out" | null>(null);
 
+  const [showShiftModal, setShowShiftModal] = useState(false);
+  const [shiftDate, setShiftDate] = useState(todayISO());
+  const [editingShift, setEditingShift] = useState<{
+    mode: "edit" | "create";
+    id?: number;
+    workerId: string;
+    date: string;
+    checkIn: string;
+    checkOut: string;
+  } | null>(null);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkCheckIn, setBulkCheckIn] = useState("");
+  const [bulkCheckOut, setBulkCheckOut] = useState("");
+  const [bulkEditBusy, setBulkEditBusy] = useState(false);
+
   const { data: entries = [], refetch, isFetching } = useListAttendance(undefined, {
-    query: { refetchInterval: 30_000 },
+    query: { refetchInterval: 30_000 } as any,
   });
+
+  const { data: shifts = [], refetch: refetchShifts } = useListAttendanceShifts(
+    { date: shiftDate },
+    { query: { enabled: showShiftModal, refetchInterval: 30_000 } as any },
+  );
+
+  const { data: workers = [] } = useListWorkers();
 
   const checkInAll = useCheckInAll();
   const checkOutAll = useCheckOutAll();
@@ -65,9 +100,18 @@ export default function AttendancePage() {
   const doCheckInSelected = async () => {
     if (selected.size === 0) return;
 
+    const selectedArray = Array.from(selected);
+    const alreadyIn = entries.filter(e => selectedArray.includes(e.workerId) && e.checkInAt && !e.checkOutAt);
+    if (alreadyIn.length > 0) {
+      const names = alreadyIn.map(e => e.workerName).join(", ");
+      if (!window.confirm(
+        `${alreadyIn.length} j\u00e1 no terreno\n${names}\n\nRegistar nova entrada?`
+      )) return;
+    }
+
     setBulkBusy("in");
     try {
-      await checkInAll.mutateAsync({ data: { workerIds: Array.from(selected) } });
+      await checkInAll.mutateAsync({ data: { workerIds: selectedArray } });
       beep("success");
       await refetch();
       toast({ title: "Entradas registadas", description: `${selected.size} trabalhador(es).` });
@@ -83,9 +127,18 @@ export default function AttendancePage() {
   const doCheckOutSelected = async () => {
     if (selected.size === 0) return;
 
+    const selectedArray = Array.from(selected);
+    const alreadyOut = entries.filter(e => selectedArray.includes(e.workerId) && e.checkInAt && e.checkOutAt);
+    if (alreadyOut.length > 0) {
+      const names = alreadyOut.map(e => e.workerName).join(", ");
+      if (!window.confirm(
+        `${alreadyOut.length} j\u00e1 sa\u00edu\n${names}\n\nRegistar nova sa\u00edda?`
+      )) return;
+    }
+
     setBulkBusy("out");
     try {
-      await checkOutAll.mutateAsync({ data: { workerIds: Array.from(selected) } });
+      await checkOutAll.mutateAsync({ data: { workerIds: selectedArray } });
       beep("success");
       await refetch();
       toast({ title: "Saídas registadas", description: `${selected.size} trabalhador(es).` });
@@ -95,6 +148,82 @@ export default function AttendancePage() {
       toast({ title: "Erro ao registar saídas", variant: "destructive" });
     } finally {
       setBulkBusy(null);
+    }
+  };
+
+  const handleEditShift = (shift: { id: number | null; workerId: string; date: string; checkInAt: string | null; checkOutAt: string | null }) => {
+    setEditingShift({
+      mode: "edit",
+      id: shift.id ?? 0,
+      workerId: shift.workerId,
+      date: shift.date,
+      checkIn: shift.checkInAt ? format(new Date(shift.checkInAt), "HH:mm") : "",
+      checkOut: shift.checkOutAt ? format(new Date(shift.checkOutAt), "HH:mm") : "",
+    });
+  };
+
+  const handleAddShift = () => {
+    setEditingShift({
+      mode: "create",
+      workerId: workers[0]?.id ?? "",
+      date: shiftDate,
+      checkIn: "",
+      checkOut: "",
+    });
+  };
+
+  const handleShiftSave = async () => {
+    if (!editingShift) return;
+    if (!editingShift.date) {
+      toast({ title: "Data inválida", variant: "destructive" });
+      return;
+    }
+    if (!editingShift.checkIn) {
+      toast({ title: "Entrada obrigatória", variant: "destructive" });
+      return;
+    }
+    try {
+      const payload = {
+        date: editingShift.date,
+        checkInAt: new Date(editingShift.date + "T" + editingShift.checkIn + ":00").toISOString(),
+        checkOutAt: editingShift.checkOut ? new Date(editingShift.date + "T" + editingShift.checkOut + ":00").toISOString() : null,
+      };
+      const url =
+        editingShift.mode === "create"
+          ? import.meta.env.VITE_API_URL + "/api/attendance/shift"
+          : import.meta.env.VITE_API_URL + "/api/attendance/shift/" + editingShift.id;
+      const res = await fetch(url, {
+        method: editingShift.mode === "create" ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          editingShift.mode === "create" ? { workerId: editingShift.workerId, ...payload } : payload,
+        ),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast({ title: body.error ?? "Erro ao guardar", variant: "destructive" });
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/attendance/shift"] });
+      setEditingShift(null);
+      toast({ title: editingShift.mode === "create" ? "Turno adicionado" : "Turno atualizado" });
+      await refetch();
+    } catch {
+      toast({ title: "Erro ao guardar", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteShift = async (id: number) => {
+    if (!window.confirm("Apagar este turno?")) return;
+    try {
+      await fetch(import.meta.env.VITE_API_URL + "/api/attendance/shift/" + id, { method: "DELETE" });
+      await queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/attendance/shift"] });
+      toast({ title: "Turno apagado" });
+      await refetch();
+    } catch {
+      toast({ title: "Erro ao apagar", variant: "destructive" });
     }
   };
 
@@ -110,13 +239,22 @@ export default function AttendancePage() {
               </h1>
               <p className="text-sm text-muted-foreground capitalize mt-1">{today}</p>
             </div>
-            <button
-              onClick={() => refetch()}
-              className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/50 transition-colors"
-              title="Actualizar"
-            >
-              <RefreshCw className={`w-5 h-5 ${isFetching ? "animate-spin" : ""}`} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowShiftModal(true)}
+                className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/50 transition-colors"
+                title="Ver turnos"
+              >
+                <Users className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => refetch()}
+                className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/50 transition-colors"
+                title="Actualizar"
+              >
+                <RefreshCw className={`w-5 h-5 ${isFetching ? "animate-spin" : ""}`} />
+              </button>
+            </div>
           </div>
 
           {/* Stats */}
@@ -239,6 +377,218 @@ export default function AttendancePage() {
           </div>
         </div>
       </div>
+
+      {/* Shift Modal */}
+      {showShiftModal && (
+        <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-md overflow-y-auto">
+          <div className="bg-card w-full max-w-4xl sm:rounded-2xl shadow-2xl flex flex-col max-h-screen sm:max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-start justify-between p-5 border-b border-border">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2.5 bg-primary/10 text-primary rounded-xl shrink-0">
+                  <Clock className="w-6 h-6" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-xl font-display font-bold text-foreground truncate">Turnos do Dia</h2>
+                  <p className="text-xs text-muted-foreground">Editar entrada/saída de toda a gente</p>
+                </div>
+              </div>
+              <button onClick={() => { setShowShiftModal(false); setEditingShift(null); }} className="p-2 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground shrink-0">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Date picker */}
+            <div className="p-5 border-b border-border">
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1">
+                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  <input
+                    type="date"
+                    value={shiftDate}
+                    onChange={e => setShiftDate(e.target.value)}
+                    className="w-full bg-background border border-border rounded-xl pl-10 pr-3 py-2.5 font-medium focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+                <button
+                  onClick={handleAddShift}
+                  disabled={workers.length === 0}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-success text-white font-bold rounded-xl shadow-lg shadow-success/20 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
+                >
+                  <Plus className="w-4 h-4" /> Adicionar
+                </button>
+                <button
+                  onClick={() => setBulkEditOpen(true)}
+                  disabled={shifts.length === 0}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
+                >
+                  <Pencil className="w-4 h-4" /> Horarios
+                </button>
+              </div>
+            </div>
+
+            {/* Shift list */}
+            <div className="flex-1 overflow-auto">
+              {shifts.length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground">
+                  <Clock className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                  <p>Sem turnos neste dia.</p>
+                  <button
+                    onClick={handleAddShift}
+                    className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary font-bold rounded-xl hover:bg-primary/20"
+                  >
+                    <Plus className="w-4 h-4" /> Adicionar turno
+                  </button>
+                </div>
+              ) : (
+                <table className="w-full text-left">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground">Trabalhador</th>
+                      <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground text-center">Entrada</th>
+                      <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground text-center">Saída</th>
+                      <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground text-right">Horas</th>
+                      <th className="p-3 font-bold text-xs uppercase tracking-wider text-muted-foreground text-center">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shifts.map((s) => (
+                      <tr key={s.id} className="border-b border-border/50 hover:bg-muted/20">
+                        <td className="p-3">
+                          <p className="font-bold text-foreground">{s.workerName}</p>
+                          <p className="text-xs text-muted-foreground font-mono">{s.workerId}</p>
+                        </td>
+                        <td className="p-3 text-center font-mono text-foreground">{fmtTime(s.checkInAt)}</td>
+                        <td className="p-3 text-center font-mono text-foreground">{fmtTime(s.checkOutAt)}</td>
+                        <td className="p-3 text-right font-bold text-foreground">{fmtHours(s.hoursWorked)}</td>
+                        <td className="p-3 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button onClick={() => handleEditShift(s)} className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors" title="Editar turno">
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => handleDeleteShift(s.id ?? 0)} className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors" title="Apagar turno">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Edit Modal */}
+      {bulkEditOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-card w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4">
+            <h2 className="text-lg font-bold">Alterar Horários do Dia</h2>
+            <p className="text-xs text-muted-foreground">Aplica a <strong>{shifts.length}</strong> turnos em {new Set(shifts.map(s => s.workerId)).size} trabalhadores.</p>
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Nova Entrada</label>
+              <input type="time" value={bulkCheckIn} onChange={e => setBulkCheckIn(e.target.value)}
+                className="w-full mt-1 border border-border rounded-lg px-4 py-2 font-mono focus:outline-none focus:border-primary" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Nova Saída</label>
+              <input type="time" value={bulkCheckOut} onChange={e => setBulkCheckOut(e.target.value)}
+                className="w-full mt-1 border border-border rounded-lg px-4 py-2 font-mono focus:outline-none focus:border-primary" />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setBulkEditOpen(false)} className="flex-1 py-2 rounded-lg border border-border font-bold hover:bg-muted/50">Cancelar</button>
+              <button
+                onClick={async () => {
+                  if (!bulkCheckIn && !bulkCheckOut) {
+                    toast({ title: "Nada a alterar", variant: "destructive" });
+                    return;
+                  }
+                  if (!window.confirm(`Alterar horários de ${shifts.length} turnos?\n\nEntrada: ${bulkCheckIn || "—"}\nSaída: ${bulkCheckOut || "—"}`)) return;
+                  setBulkEditBusy(true);
+                  try {
+                    const body: Record<string, unknown> = {
+                      shiftIds: shifts.map(s => s.id),
+                      date: shiftDate,
+                    };
+                    if (bulkCheckIn) body.checkInAt = new Date(shiftDate + "T" + bulkCheckIn + ":00").toISOString();
+                    if (bulkCheckOut) body.checkOutAt = new Date(shiftDate + "T" + bulkCheckOut + ":00").toISOString();
+                    const res = await fetch(import.meta.env.VITE_API_URL + "/api/attendance/shift/bulk-update", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(body),
+                    });
+                    if (!res.ok) {
+                      const body = await res.json().catch(() => ({}));
+                      toast({ title: body.error ?? "Erro ao alterar", variant: "destructive" });
+                      return;
+                    }
+                    await queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
+                    await queryClient.invalidateQueries({ queryKey: ["/api/attendance/shift"] });
+                    setBulkEditOpen(false);
+                    setBulkCheckIn("");
+                    setBulkCheckOut("");
+                    toast({ title: "Horários alterados", description: `${shifts.length} turnos actualizados.` });
+                    await refetch();
+                    await refetchShifts();
+                  } catch {
+                    toast({ title: "Erro ao alterar", variant: "destructive" });
+                  } finally {
+                    setBulkEditBusy(false);
+                  }
+                }}
+                disabled={bulkEditBusy}
+                className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground font-bold hover:opacity-90 disabled:opacity-40"
+              >
+                {bulkEditBusy ? "A gravar..." : "Alterar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shift Edit Modal */}
+      {editingShift && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-card w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4">
+            <h2 className="text-lg font-bold">{editingShift.mode === "create" ? "Adicionar Turno" : "Editar Turno"}</h2>
+            {editingShift.mode === "create" && (
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Trabalhador</label>
+                <select
+                  value={editingShift.workerId}
+                  onChange={e => setEditingShift({ ...editingShift, workerId: e.target.value })}
+                  className="w-full mt-1 border border-border rounded-lg px-4 py-2 font-medium focus:outline-none focus:border-primary bg-background"
+                >
+                  {workers.map(w => (
+                    <option key={w.id} value={w.id}>{w.name} ({w.id})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Dia</label>
+              <input type="date" value={editingShift.date} onChange={e => setEditingShift({ ...editingShift, date: e.target.value })}
+                className="w-full mt-1 border border-border rounded-lg px-4 py-2 font-mono focus:outline-none focus:border-primary" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Entrada</label>
+              <input type="time" value={editingShift.checkIn} onChange={e => setEditingShift({ ...editingShift, checkIn: e.target.value })}
+                className="w-full mt-1 border border-border rounded-lg px-4 py-2 font-mono focus:outline-none focus:border-primary" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Saída</label>
+              <input type="time" value={editingShift.checkOut} onChange={e => setEditingShift({ ...editingShift, checkOut: e.target.value })}
+                className="w-full mt-1 border border-border rounded-lg px-4 py-2 font-mono focus:outline-none focus:border-primary" />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setEditingShift(null)} className="flex-1 py-2 rounded-lg border border-border font-bold hover:bg-muted/50">Cancelar</button>
+              <button onClick={handleShiftSave} className="flex-1 py-2 rounded-lg bg-primary text-primary-foreground font-bold hover:opacity-90">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

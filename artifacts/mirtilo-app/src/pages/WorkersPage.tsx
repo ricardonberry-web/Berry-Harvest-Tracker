@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Layout } from "@/components/Layout";
 import {
   useListWorkers,
@@ -7,9 +7,10 @@ import {
   useDeleteWorker,
   useGetWorkerTimesheet,
 } from "@workspace/api-client-react";
-import { Users, Plus, QrCode, Search, UserCheck, Clock, Download, X, Calendar as CalendarIcon, Euro, Pencil, Trash2, AlertTriangle, Power, PowerOff } from "lucide-react";
+import { Users, Plus, QrCode, Barcode, Search, UserCheck, Clock, Download, X, Calendar as CalendarIcon, Euro, Pencil, Trash2, AlertTriangle, Power, PowerOff } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
+import JsBarcode from "jsbarcode";
 import { getListWorkersQueryKey, getListAttendanceQueryKey } from "@workspace/api-client-react";
 import { format, subDays } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +28,7 @@ export default function WorkersPage() {
   const [showInactive, setShowInactive] = useState(true);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedQR, setSelectedQR] = useState<{id: string, name: string} | null>(null);
+  const [selectedBarcode, setSelectedBarcode] = useState<{id: string, name: string} | null>(null);
   const [selectedTimesheet, setSelectedTimesheet] = useState<{id: string, name: string} | null>(null);
   const [selectedEdit, setSelectedEdit] = useState<WorkerRow | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -175,20 +177,27 @@ export default function WorkersPage() {
                   </div>
                 </div>
 
-                <div className="mt-auto pt-4 grid grid-cols-2 gap-2">
+                <div className="mt-auto pt-4 grid grid-cols-3 gap-2">
                   <button
                     onClick={() => setSelectedQR({ id: worker.id, name: worker.name })}
                     className="flex items-center justify-center gap-2 bg-secondary text-secondary-foreground py-2 rounded-lg font-medium hover:bg-secondary/80 transition-colors text-sm"
                   >
                     <QrCode className="w-4 h-4" />
-                    Badge
+                    QR
+                  </button>
+                  <button
+                    onClick={() => setSelectedBarcode({ id: worker.id, name: worker.name })}
+                    className="flex items-center justify-center gap-2 bg-primary/10 text-primary py-2 rounded-lg font-bold hover:bg-primary/20 transition-colors text-sm"
+                  >
+                    <Barcode className="w-4 h-4" />
+                    Barras
                   </button>
                   <button
                     onClick={() => setSelectedTimesheet({ id: worker.id, name: worker.name })}
-                    className="flex items-center justify-center gap-2 bg-primary/10 text-primary py-2 rounded-lg font-bold hover:bg-primary/20 transition-colors text-sm"
+                    className="flex items-center justify-center gap-2 bg-muted text-muted-foreground py-2 rounded-lg font-bold hover:bg-muted/70 transition-colors text-sm"
                   >
                     <Clock className="w-4 h-4" />
-                    Folha Horas
+                    Horas
                   </button>
                 </div>
               </div>
@@ -200,6 +209,7 @@ export default function WorkersPage() {
 
       {isAddOpen && <AddWorkerModal onClose={() => setIsAddOpen(false)} />}
       {selectedQR && <QRModal data={selectedQR} onClose={() => setSelectedQR(null)} />}
+      {selectedBarcode && <BarcodeModal data={selectedBarcode} onClose={() => setSelectedBarcode(null)} />}
       {selectedTimesheet && (
         <TimesheetModal
           worker={selectedTimesheet}
@@ -452,6 +462,65 @@ function QRModal({ data, onClose }) {
         <p className="text-gray-500 font-mono text-lg mb-8 tracking-widest">{data.id}</p>
         <div className="bg-white p-4 border-4 border-gray-100 rounded-2xl mb-8">
           <QRCodeSVG id="qr-svg" value={data.id} size={200} level="H" />
+        </div>
+        <div className="flex gap-3 w-full">
+          <button onClick={onClose} className="flex-1 py-4 bg-gray-100 text-gray-800 font-bold rounded-xl hover:bg-gray-200 transition-colors">
+            Fechar
+          </button>
+          <button onClick={handleDownload} className="flex-1 py-4 bg-black text-white font-bold rounded-xl hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
+            <Download className="w-4 h-4" /> Exportar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BarcodeModal({ data, onClose }: { data: { id: string; name: string }; onClose: () => void }) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const handleDownload = () => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement("canvas");
+    canvas.width = 300;
+    canvas.height = 120;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const link = document.createElement("a");
+      link.download = "barcode-" + data.id + ".png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    };
+    img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData)));
+  };
+
+  useEffect(() => {
+    if (svgRef.current && data.id) {
+      JsBarcode(svgRef.current, data.id, {
+        format: "CODE128",
+        width: 2,
+        height: 60,
+        displayValue: true,
+        fontSize: 16,
+        font: "monospace",
+        margin: 10,
+      });
+    }
+  }, [data.id]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md" onClick={onClose}>
+      <div className="bg-white text-black w-full max-w-sm rounded-3xl p-8 text-center flex flex-col items-center" onClick={e => e.stopPropagation()}>
+        <h2 className="text-3xl font-display font-black mb-1">{data.name}</h2>
+        <p className="text-gray-500 font-mono text-lg mb-8 tracking-widest">{data.id}</p>
+        <div className="bg-white p-4 border-4 border-gray-100 rounded-2xl mb-8">
+          <svg ref={svgRef} className="w-full" />
         </div>
         <div className="flex gap-3 w-full">
           <button onClick={onClose} className="flex-1 py-4 bg-gray-100 text-gray-800 font-bold rounded-xl hover:bg-gray-200 transition-colors">

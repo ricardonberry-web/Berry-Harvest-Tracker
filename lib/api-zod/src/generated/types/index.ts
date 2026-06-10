@@ -19,6 +19,7 @@ export * from "./getDailyReportParams";
 export * from "./getWorkerTimesheetParams";
 export * from "./healthStatus";
 export * from "./listAttendanceParams";
+export * from "./listAttendanceShiftsParams";
 export * from "./listWeighRecordsParams";
 export * from "./qualityIssue";
 export * from "./qualityIssueCounts";

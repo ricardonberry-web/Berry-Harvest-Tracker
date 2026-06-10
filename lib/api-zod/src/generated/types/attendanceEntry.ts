@@ -7,6 +7,11 @@
  */
 
 export interface AttendanceEntry {
+  /**
+   * Shift id (null for aggregated entries)
+   * @nullable
+   */
+  id: number | null;
   workerId: string;
   workerName: string;
   /** ISO date YYYY-MM-DD */
@@ -20,4 +25,9 @@ export interface AttendanceEntry {
    * @nullable
    */
   hoursWorked: number | null;
+  /**
+   * Number of shifts in the day (aggregated entries only)
+   * @nullable
+   */
+  shiftsCount: number | null;
 }

@@ -170,6 +170,10 @@ export const ListAttendanceQueryParams = zod.object({
 });
 
 export const ListAttendanceResponseItem = zod.object({
+  id: zod
+    .number()
+    .nullable()
+    .describe("Shift id (null for aggregated entries)"),
   workerId: zod.string(),
   workerName: zod.string(),
   date: zod.string().describe("ISO date YYYY-MM-DD"),
@@ -181,6 +185,10 @@ export const ListAttendanceResponseItem = zod.object({
     .describe(
       "Hours between check-in and check-out (null if not yet checked out)",
     ),
+  shiftsCount: zod
+    .number()
+    .nullable()
+    .describe("Number of shifts in the day (aggregated entries only)"),
 });
 export const ListAttendanceResponse = zod.array(ListAttendanceResponseItem);
 
@@ -196,6 +204,10 @@ export const CheckInWorkerBody = zod.object({
 });
 
 export const CheckInWorkerResponse = zod.object({
+  id: zod
+    .number()
+    .nullable()
+    .describe("Shift id (null for aggregated entries)"),
   workerId: zod.string(),
   workerName: zod.string(),
   date: zod.string().describe("ISO date YYYY-MM-DD"),
@@ -207,6 +219,10 @@ export const CheckInWorkerResponse = zod.object({
     .describe(
       "Hours between check-in and check-out (null if not yet checked out)",
     ),
+  shiftsCount: zod
+    .number()
+    .nullable()
+    .describe("Number of shifts in the day (aggregated entries only)"),
 });
 
 /**
@@ -221,6 +237,10 @@ export const CheckOutWorkerBody = zod.object({
 });
 
 export const CheckOutWorkerResponse = zod.object({
+  id: zod
+    .number()
+    .nullable()
+    .describe("Shift id (null for aggregated entries)"),
   workerId: zod.string(),
   workerName: zod.string(),
   date: zod.string().describe("ISO date YYYY-MM-DD"),
@@ -232,6 +252,10 @@ export const CheckOutWorkerResponse = zod.object({
     .describe(
       "Hours between check-in and check-out (null if not yet checked out)",
     ),
+  shiftsCount: zod
+    .number()
+    .nullable()
+    .describe("Number of shifts in the day (aggregated entries only)"),
 });
 
 /**
@@ -251,6 +275,10 @@ export const CheckInAllBody = zod.object({
 });
 
 export const CheckInAllResponseItem = zod.object({
+  id: zod
+    .number()
+    .nullable()
+    .describe("Shift id (null for aggregated entries)"),
   workerId: zod.string(),
   workerName: zod.string(),
   date: zod.string().describe("ISO date YYYY-MM-DD"),
@@ -262,6 +290,10 @@ export const CheckInAllResponseItem = zod.object({
     .describe(
       "Hours between check-in and check-out (null if not yet checked out)",
     ),
+  shiftsCount: zod
+    .number()
+    .nullable()
+    .describe("Number of shifts in the day (aggregated entries only)"),
 });
 export const CheckInAllResponse = zod.array(CheckInAllResponseItem);
 
@@ -282,6 +314,10 @@ export const CheckOutAllBody = zod.object({
 });
 
 export const CheckOutAllResponseItem = zod.object({
+  id: zod
+    .number()
+    .nullable()
+    .describe("Shift id (null for aggregated entries)"),
   workerId: zod.string(),
   workerName: zod.string(),
   date: zod.string().describe("ISO date YYYY-MM-DD"),
@@ -293,8 +329,47 @@ export const CheckOutAllResponseItem = zod.object({
     .describe(
       "Hours between check-in and check-out (null if not yet checked out)",
     ),
+  shiftsCount: zod
+    .number()
+    .nullable()
+    .describe("Number of shifts in the day (aggregated entries only)"),
 });
 export const CheckOutAllResponse = zod.array(CheckOutAllResponseItem);
+
+/**
+ * @summary List all individual shifts for a day (not aggregated)
+ */
+export const ListAttendanceShiftsQueryParams = zod.object({
+  date: zod.coerce
+    .string()
+    .optional()
+    .describe("ISO date YYYY-MM-DD (defaults to today)"),
+});
+
+export const ListAttendanceShiftsResponseItem = zod.object({
+  id: zod
+    .number()
+    .nullable()
+    .describe("Shift id (null for aggregated entries)"),
+  workerId: zod.string(),
+  workerName: zod.string(),
+  date: zod.string().describe("ISO date YYYY-MM-DD"),
+  checkInAt: zod.date().nullable(),
+  checkOutAt: zod.date().nullable(),
+  hoursWorked: zod
+    .number()
+    .nullable()
+    .describe(
+      "Hours between check-in and check-out (null if not yet checked out)",
+    ),
+  shiftsCount: zod
+    .number()
+    .nullable()
+    .describe("Number of shifts in the day (aggregated entries only)"),
+});
+export const ListAttendanceShiftsResponse = zod.array(
+  ListAttendanceShiftsResponseItem,
+);
 
 /**
  * @summary Manually create a shift (entrada/saída) for a worker on a day
@@ -325,6 +400,10 @@ export const UpdateAttendanceShiftBody = zod
   .describe("All fields optional; omit a field to leave it unchanged.");
 
 export const UpdateAttendanceShiftResponse = zod.object({
+  id: zod
+    .number()
+    .nullable()
+    .describe("Shift id (null for aggregated entries)"),
   workerId: zod.string(),
   workerName: zod.string(),
   date: zod.string().describe("ISO date YYYY-MM-DD"),
@@ -336,6 +415,10 @@ export const UpdateAttendanceShiftResponse = zod.object({
     .describe(
       "Hours between check-in and check-out (null if not yet checked out)",
     ),
+  shiftsCount: zod
+    .number()
+    .nullable()
+    .describe("Number of shifts in the day (aggregated entries only)"),
 });
 
 /**

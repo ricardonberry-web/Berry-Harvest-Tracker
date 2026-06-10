@@ -30,6 +30,7 @@ import type {
   GetWorkerTimesheetParams,
   HealthStatus,
   ListAttendanceParams,
+  ListAttendanceShiftsParams,
   ListWeighRecordsParams,
   ShiftCreateBody,
   ShiftUpdateBody,
@@ -1330,6 +1331,106 @@ export const useCheckOutAll = <
 > => {
   return useMutation(getCheckOutAllMutationOptions(options));
 };
+
+/**
+ * @summary List all individual shifts for a day (not aggregated)
+ */
+export const getListAttendanceShiftsUrl = (
+  params?: ListAttendanceShiftsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/attendance/shift?${stringifiedParams}`
+    : `/api/attendance/shift`;
+};
+
+export const listAttendanceShifts = async (
+  params?: ListAttendanceShiftsParams,
+  options?: RequestInit,
+): Promise<AttendanceEntry[]> => {
+  return customFetch<AttendanceEntry[]>(getListAttendanceShiftsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAttendanceShiftsQueryKey = (
+  params?: ListAttendanceShiftsParams,
+) => {
+  return [`/api/attendance/shift`, ...(params ? [params] : [])] as const;
+};
+
+export const getListAttendanceShiftsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAttendanceShifts>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: ListAttendanceShiftsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAttendanceShifts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAttendanceShiftsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAttendanceShifts>>
+  > = ({ signal }) =>
+    listAttendanceShifts(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAttendanceShifts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAttendanceShiftsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAttendanceShifts>>
+>;
+export type ListAttendanceShiftsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List all individual shifts for a day (not aggregated)
+ */
+
+export function useListAttendanceShifts<
+  TData = Awaited<ReturnType<typeof listAttendanceShifts>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: ListAttendanceShiftsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAttendanceShifts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAttendanceShiftsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Manually create a shift (entrada/saída) for a worker on a day
