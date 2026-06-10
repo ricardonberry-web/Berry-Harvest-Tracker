@@ -100,29 +100,72 @@ export default function RankingPage() {
 
   const handleExportImage = async () => {
     if (!exportRef.current) return;
+    let tmpContainer: HTMLDivElement | null = null;
+
     try {
-      const canvas = await html2canvas(exportRef.current, {
+      // Clona o elemento para um container temporario fora do viewport.
+      // Isso evita problemas com scroll/overflow do modal e nao interfere
+      // no DOM gerido pelo React.
+      const clone = exportRef.current.cloneNode(true) as HTMLDivElement;
+      clone.style.width = "800px";
+      clone.style.maxWidth = "800px";
+      clone.style.margin = "0";
+
+      tmpContainer = document.createElement("div");
+      tmpContainer.style.position = "fixed";
+      tmpContainer.style.top = "-9999px";
+      tmpContainer.style.left = "-9999px";
+      tmpContainer.style.width = "800px";
+      tmpContainer.style.zIndex = "-1";
+      document.body.appendChild(tmpContainer);
+      tmpContainer.appendChild(clone);
+
+      const canvas = await html2canvas(clone, {
         scale: 2,
         backgroundColor: "#ffffff",
         useCORS: true,
+        logging: false,
       });
+
       const link = document.createElement("a");
       link.download = `ranking-${dateFrom}${dateFrom !== dateTo ? `-${dateTo}` : ""}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
       toast({ title: "Imagem exportada!" });
-    } catch {
+    } catch (err) {
+      console.error("Erro ao exportar imagem:", err);
       toast({ title: "Erro ao exportar imagem", variant: "destructive" });
+    } finally {
+      if (tmpContainer && tmpContainer.parentNode) {
+        document.body.removeChild(tmpContainer);
+      }
     }
   };
 
   const handleExportPDF = async () => {
     if (!exportRef.current) return;
+    let tmpContainer: HTMLDivElement | null = null;
+
     try {
-      const canvas = await html2canvas(exportRef.current, {
+      const clone = exportRef.current.cloneNode(true) as HTMLDivElement;
+      clone.style.width = "800px";
+      clone.style.maxWidth = "800px";
+      clone.style.margin = "0";
+
+      tmpContainer = document.createElement("div");
+      tmpContainer.style.position = "fixed";
+      tmpContainer.style.top = "-9999px";
+      tmpContainer.style.left = "-9999px";
+      tmpContainer.style.width = "800px";
+      tmpContainer.style.zIndex = "-1";
+      document.body.appendChild(tmpContainer);
+      tmpContainer.appendChild(clone);
+
+      const canvas = await html2canvas(clone, {
         scale: 2,
         backgroundColor: "#ffffff",
         useCORS: true,
+        logging: false,
       });
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
@@ -138,8 +181,13 @@ export default function RankingPage() {
       pdf.addImage(imgData, "PNG", x, y, finalWidth, finalHeight);
       pdf.save(`ranking-${dateFrom}${dateFrom !== dateTo ? `-${dateTo}` : ""}.pdf`);
       toast({ title: "PDF exportado!" });
-    } catch {
+    } catch (err) {
+      console.error("Erro ao exportar PDF:", err);
       toast({ title: "Erro ao exportar PDF", variant: "destructive" });
+    } finally {
+      if (tmpContainer && tmpContainer.parentNode) {
+        document.body.removeChild(tmpContainer);
+      }
     }
   };
 
@@ -456,9 +504,9 @@ export default function RankingPage() {
 
                 {/* Ranking list */}
                 <div className="space-y-2">
-                  {sortedWorkers.slice(0, 10).map((w, i) => (
+                  {sortedWorkers.map((w, i) => (
                     <div key={w.workerId} className={`flex items-center gap-3 p-3 rounded-lg ${i === 0 ? 'bg-yellow-50 border border-yellow-200' : i === 1 ? 'bg-slate-50 border border-slate-200' : i === 2 ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50 border border-gray-100'}`}>
-                      <div className="w-8 h-8 flex items-center justify-center font-black text-sm">
+                      <div className="w-8 h-8 flex items-center justify-center font-black text-sm shrink-0">
                         {i === 0 ? <span className="text-yellow-500 text-lg">1</span> : i === 1 ? <span className="text-slate-400 text-lg">2</span> : i === 2 ? <span className="text-amber-700 text-lg">3</span> : <span className="text-muted-foreground">{i + 1}</span>}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -470,8 +518,15 @@ export default function RankingPage() {
                         ) : (
                           <p className="font-bold text-sm text-foreground">Trabalhador {i + 1}</p>
                         )}
+                        {w.totalIssues > 0 && (
+                          <div className="inline-flex items-center gap-1 mt-1">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                              {w.totalIssues} ocor.
+                            </span>
+                          </div>
+                        )}
                       </div>
-                      <div className="text-right">
+                      <div className="text-right shrink-0">
                         <p className="font-black text-primary text-lg">{(w.totalKg ?? 0).toFixed(2)} <span className="text-xs font-medium text-muted-foreground">kg</span></p>
                         <p className="text-xs text-muted-foreground">{w.totalCaixas} cx · {fmtHours(w.hoursWorked)} · {(w.kgPorHora ?? 0).toFixed(2)} kg/h</p>
                       </div>
