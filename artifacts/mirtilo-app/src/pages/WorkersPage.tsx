@@ -433,7 +433,7 @@ function EditWorkerModal({ worker, onClose }: { worker: WorkerRow; onClose: () =
   );
 }
 
-function QRModal({ data, onClose }) {
+function QRModal({ data, onClose }: { data: { id: string; name: string }; onClose: () => void }) {
   const handleDownload = () => {
     const svg = document.getElementById("qr-svg");
     if (!svg) return;
@@ -640,7 +640,7 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
   const { data: ts, isLoading } = useGetWorkerTimesheet(
     worker.id,
     { from, to, ...(hourlyRate !== null ? { hourlyRate } : {}) },
-    { query: { keepPreviousData: true } },
+    { query: { keepPreviousData: true } as any },
   );
 
   const handleExport = () => {
@@ -683,9 +683,9 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-md overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md overflow-y-auto" onClick={onClose}>
       <div
-        className="bg-card w-full max-w-4xl sm:rounded-2xl shadow-2xl flex flex-col max-h-screen sm:max-h-[90vh]"
+        className="bg-card w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -776,7 +776,7 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
         </div>
 
         {/* Days table */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto -mx-5 px-5">
           {isLoading ? (
             <div className="p-12 flex justify-center">
               <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>

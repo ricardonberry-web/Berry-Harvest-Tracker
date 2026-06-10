@@ -1,11 +1,13 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Layout } from "@/components/Layout";
 import { useGetDailyReport, useListWeighRecords, useUpdateWeighRecord, useDeleteWeighRecord } from "@workspace/api-client-react";
-import { Trophy, Download, Calendar as CalendarIcon, Medal, Filter, ListOrdered, Clock, AlertTriangle, Pencil, Trash2 } from "lucide-react";
+import { Trophy, Download, Calendar as CalendarIcon, Medal, Filter, ListOrdered, Clock, AlertTriangle, Pencil, Trash2, Camera, FileText, Eye, EyeOff, X } from "lucide-react";
 import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { QUALITY_ISSUES, QUALITY_LABELS, QUALITY_SHORT, QUALITY_CHIP_CLASS, type QualityIssue } from "@/lib/quality-issues";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 
 type SortKey = "kg" | "kgPorHora" | "caixas" | "horas";
 type Tab = "ranking" | "weighings";
@@ -46,7 +48,7 @@ export default function RankingPage() {
       .then(r => r.json())
       .then(data => { setReport(data); setIsLoading(false); })
       .catch(() => setIsLoading(false));
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, period]);
   const { data: allRecords = [], isLoading: recordsLoading } = useListWeighRecords({ date: dateFrom }, { query: { keepPreviousData: true } as any });
 
   const hourRangeInverted = useMemo(() => {
@@ -76,7 +78,7 @@ export default function RankingPage() {
 
   const sortedWorkers = useMemo(() => {
     if (!report?.workers) return [];
-    const filtered = onlyWithHours ? report.workers.filter(w => w.hoursWorked !== null && w.hoursWorked > 0) : report.workers;
+    const filtered = onlyWithHours ? report.workers.filter((w: any) => w.hoursWorked !== null && w.hoursWorked > 0) : report.workers;
     return [...filtered].sort((a, b) => {
       switch (sortKey) {
         case "kgPorHora": return ((b.kgPorHora ?? b.totalKg) ?? -1) - ((a.kgPorHora ?? a.totalKg) ?? -1);
@@ -87,10 +89,59 @@ export default function RankingPage() {
     });
   }, [report, sortKey, onlyWithHours]);
 
-  const teamHours = useMemo(() => (report?.workers ?? []).reduce((acc, w) => acc + (w.hoursWorked ?? 0), 0), [report]);
+  const teamHours = useMemo(() => (report?.workers ?? []).reduce((acc: number, w: any) => acc + (w.hoursWorked ?? 0), 0), [report]);
   const teamKgPorHora = teamHours > 0 ? (report?.totalKg ?? 0) / teamHours : null;
 
-  const handleExport = () => { window.location.href = `/api/reports/export?date=${date}`; };
+  const handleExport = () => { window.location.href = `/api/reports/export?date=${dateFrom}`; };
+
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showNames, setShowNames] = useState(true);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  const handleExportImage = async () => {
+    if (!exportRef.current) return;
+    try {
+      const canvas = await html2canvas(exportRef.current, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+      });
+      const link = document.createElement("a");
+      link.download = `ranking-${dateFrom}${dateFrom !== dateTo ? `-${dateTo}` : ""}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      toast({ title: "Imagem exportada!" });
+    } catch {
+      toast({ title: "Erro ao exportar imagem", variant: "destructive" });
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!exportRef.current) return;
+    try {
+      const canvas = await html2canvas(exportRef.current, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+      });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = Math.min(pageWidth / imgWidth, pageHeight / imgHeight) * 0.95;
+      const finalWidth = imgWidth * ratio;
+      const finalHeight = imgHeight * ratio;
+      const x = (pageWidth - finalWidth) / 2;
+      const y = (pageHeight - finalHeight) / 2;
+      pdf.addImage(imgData, "PNG", x, y, finalWidth, finalHeight);
+      pdf.save(`ranking-${dateFrom}${dateFrom !== dateTo ? `-${dateTo}` : ""}.pdf`);
+      toast({ title: "PDF exportado!" });
+    } catch {
+      toast({ title: "Erro ao exportar PDF", variant: "destructive" });
+    }
+  };
 
   const handleEdit = (id: number, weightGrams: number, timestamp: string) => {
     setEditingRecord({ id, weightGrams, timestamp });
@@ -162,7 +213,10 @@ export default function RankingPage() {
               <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="bg-background border border-border rounded-xl pl-10 pr-4 py-2 font-medium text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
             </div>
             <button onClick={handleExport} className="flex items-center justify-center gap-2 bg-secondary text-secondary-foreground px-4 py-2 rounded-xl font-bold hover:bg-secondary/80 transition-colors">
-              <Download className="w-4 h-4" /><span className="hidden sm:inline">Exportar CSV</span>
+              <Download className="w-4 h-4" /><span className="hidden sm:inline">CSV</span>
+            </button>
+            <button onClick={() => setShowExportModal(true)} disabled={isLoading || !sortedWorkers.length} className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl font-bold hover:bg-primary/90 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
+              <Camera className="w-4 h-4" /><span className="hidden sm:inline">Partilhar</span>
             </button>
           </div>
             <div className="flex gap-2 flex-wrap mt-1">
@@ -338,6 +392,115 @@ export default function RankingPage() {
         )}
 
       </div>
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md" onClick={() => setShowExportModal(false)}>
+          <div className="bg-card w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-primary/10 text-primary rounded-xl">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold">Exportar Resultados</h2>
+                  <p className="text-xs text-muted-foreground">{dateFrom === dateTo ? dateFrom : `${dateFrom} → ${dateTo}`}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowExportModal(false)} className="p-2 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Toggle names */}
+            <div className="p-4 border-b border-border flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">Mostrar nomes dos trabalhadores</span>
+              <button
+                onClick={() => setShowNames(v => !v)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors ${showNames ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+              >
+                {showNames ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                {showNames ? "Visível" : "Anonimizado"}
+              </button>
+            </div>
+
+            {/* Preview */}
+            <div className="flex-1 overflow-auto p-4 bg-muted/30">
+              <div ref={exportRef} className="bg-white rounded-xl p-6 shadow-sm">
+                {/* Header do preview */}
+                <div className="text-center mb-6">
+                  <h3 className="text-2xl font-black text-primary mb-1">MirtiloTrack</h3>
+                  <p className="text-sm text-muted-foreground">Ranking de Produtividade</p>
+                  <p className="text-xs text-muted-foreground mt-1">{dateFrom === dateTo ? format(new Date(dateFrom), "dd/MM/yyyy") : `${format(new Date(dateFrom), "dd/MM/yyyy")} — ${format(new Date(dateTo), "dd/MM/yyyy")}`}</p>
+                  {period !== "all" && (
+                    <p className="text-xs text-primary font-bold mt-1">{period === "morning" ? "Manhã (00-13h)" : "Tarde (14-23h)"}</p>
+                  )}
+                </div>
+
+                {/* Stats */}
+                <div className="grid grid-cols-3 gap-3 mb-6">
+                  <div className="text-center p-3 bg-primary/5 rounded-lg">
+                    <p className="text-xs text-muted-foreground font-bold uppercase">Total</p>
+                    <p className="text-lg font-black text-primary">{(report?.totalKg ?? 0).toFixed(1)} kg</p>
+                  </div>
+                  <div className="text-center p-3 bg-primary/5 rounded-lg">
+                    <p className="text-xs text-muted-foreground font-bold uppercase">Caixas</p>
+                    <p className="text-lg font-black text-primary">{report?.totalRecords ?? 0}</p>
+                  </div>
+                  <div className="text-center p-3 bg-primary/5 rounded-lg">
+                    <p className="text-xs text-muted-foreground font-bold uppercase">Equipa</p>
+                    <p className="text-lg font-black text-primary">{report?.workers?.length ?? 0}</p>
+                  </div>
+                </div>
+
+                {/* Ranking list */}
+                <div className="space-y-2">
+                  {sortedWorkers.slice(0, 10).map((w, i) => (
+                    <div key={w.workerId} className={`flex items-center gap-3 p-3 rounded-lg ${i === 0 ? 'bg-yellow-50 border border-yellow-200' : i === 1 ? 'bg-slate-50 border border-slate-200' : i === 2 ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50 border border-gray-100'}`}>
+                      <div className="w-8 h-8 flex items-center justify-center font-black text-sm">
+                        {i === 0 ? <span className="text-yellow-500 text-lg">1</span> : i === 1 ? <span className="text-slate-400 text-lg">2</span> : i === 2 ? <span className="text-amber-700 text-lg">3</span> : <span className="text-muted-foreground">{i + 1}</span>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        {showNames ? (
+                          <>
+                            <p className="font-bold text-sm text-foreground truncate">{w.workerName}</p>
+                            <p className="text-xs text-muted-foreground font-mono">{w.workerId}</p>
+                          </>
+                        ) : (
+                          <p className="font-bold text-sm text-foreground">Trabalhador {i + 1}</p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="font-black text-primary text-lg">{(w.totalKg ?? 0).toFixed(2)} <span className="text-xs font-medium text-muted-foreground">kg</span></p>
+                        <p className="text-xs text-muted-foreground">{w.totalCaixas} cx · {fmtHours(w.hoursWorked)} · {(w.kgPorHora ?? 0).toFixed(2)} kg/h</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Footer */}
+                <div className="mt-6 pt-4 border-t border-gray-100 text-center">
+                  <p className="text-xs text-muted-foreground">MirtiloTrack — Sistema de Gestão de Colheita</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="p-4 border-t border-border flex gap-3">
+              <button onClick={() => setShowExportModal(false)} className="flex-1 py-3 bg-muted text-foreground font-bold rounded-xl hover:bg-muted/80">
+                Cancelar
+              </button>
+              <button onClick={handleExportImage} className="flex-1 flex items-center justify-center gap-2 py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/25 hover:shadow-primary/40">
+                <Camera className="w-5 h-5" /> Imagem
+              </button>
+              <button onClick={handleExportPDF} className="flex-1 flex items-center justify-center gap-2 py-3 bg-secondary text-secondary-foreground font-bold rounded-xl hover:bg-secondary/80">
+                <FileText className="w-5 h-5" /> PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
