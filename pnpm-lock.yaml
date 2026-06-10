@@ -231,9 +231,9 @@ importers:
       '@types/w3c-web-serial':
         specifier: ^1.0.8
         version: 1.0.8
-      html2canvas:
-        specifier: ^1.4.1
-        version: 1.4.1
+      html-to-image:
+        specifier: ^1.11.13
+        version: 1.11.13
       jsbarcode:
         specifier: ^3.12.3
         version: 3.12.3
@@ -2393,6 +2393,9 @@ packages:
 
   help-me@5.0.0:
     resolution: {integrity: sha512-7xgomUX6ADmcYzFik0HzAxh/73YlKR9bmFzf51CZwR+b6YtzU2m0u49hQCqV6SvlqIqsaxovfwdvbnsw3b/zpg==}
+
+  html-to-image@1.11.13:
+    resolution: {integrity: sha512-cuOPoI7WApyhBElTTb9oqsawRvZ0rHhaHwghRLlTuffoD1B2aDemlCruLeZrUIIdvG7gs9xeELEPm6PhuASqrg==}
 
   html2canvas@1.4.1:
     resolution: {integrity: sha512-fPU6BHNpsyIhr8yyMpTLLxAbkaK8ArIBcmZIRiBLiDhjeqvXolaEmDGmELFuX9I4xDcaKKcJl+TKZLqruBbmWA==}
@@ -4695,7 +4698,8 @@ snapshots:
 
   balanced-match@1.0.2: {}
 
-  base64-arraybuffer@1.0.2: {}
+  base64-arraybuffer@1.0.2:
+    optional: true
 
   baseline-browser-mapping@2.10.0: {}
 
@@ -4821,6 +4825,7 @@ snapshots:
   css-line-break@2.1.0:
     dependencies:
       utrie: 1.0.2
+    optional: true
 
   cssesc@3.0.0: {}
 
@@ -5178,10 +5183,13 @@ snapshots:
 
   help-me@5.0.0: {}
 
+  html-to-image@1.11.13: {}
+
   html2canvas@1.4.1:
     dependencies:
       css-line-break: 2.1.0
       text-segmentation: 1.0.3
+    optional: true
 
   http-errors@2.0.1:
     dependencies:
@@ -5886,6 +5894,7 @@ snapshots:
   text-segmentation@1.0.3:
     dependencies:
       utrie: 1.0.2
+    optional: true
 
   thread-stream@3.1.0:
     dependencies:
@@ -5986,6 +5995,7 @@ snapshots:
   utrie@1.0.2:
     dependencies:
       base64-arraybuffer: 1.0.2
+    optional: true
 
   vary@1.1.2: {}
 

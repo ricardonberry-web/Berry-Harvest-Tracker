@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { useGetDailyReport, useListWeighRecords, useUpdateWeighRecord, useDeleteWeighRecord } from "@workspace/api-client-react";
 import { Trophy, Download, Calendar as CalendarIcon, Medal, Filter, ListOrdered, Clock, AlertTriangle, Pencil, Trash2, Camera, FileText, Eye, EyeOff, X } from "lucide-react";
@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { QUALITY_ISSUES, QUALITY_LABELS, QUALITY_SHORT, QUALITY_CHIP_CLASS, type QualityIssue } from "@/lib/quality-issues";
-import html2canvas from "html2canvas";
+import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 
 type SortKey = "kg" | "kgPorHora" | "caixas" | "horas";
@@ -96,97 +96,188 @@ export default function RankingPage() {
 
   const [showExportModal, setShowExportModal] = useState(false);
   const [showNames, setShowNames] = useState(true);
-  const exportRef = useRef<HTMLDivElement>(null);
+
+  const buildCaptureElement = (): HTMLDivElement => {
+    const dateLabel = dateFrom === dateTo
+      ? format(new Date(dateFrom), "dd/MM/yyyy")
+      : `${format(new Date(dateFrom), "dd/MM/yyyy")} \u2014 ${format(new Date(dateTo), "dd/MM/yyyy")}`;
+    const periodLabel = period === "morning" ? "Manh\u00e3 (00-13h)" : period === "afternoon" ? "Tarde (14-23h)" : "";
+
+    const el = document.createElement("div");
+    el.style.width = "800px";
+    el.style.padding = "24px";
+    el.style.background = "#ffffff";
+    el.style.fontFamily = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+
+    const mk = (tag: string, styles: Partial<CSSStyleDeclaration> = {}, text?: string): HTMLElement => {
+      const node = document.createElement(tag);
+      Object.assign(node.style, styles);
+      if (text !== undefined) node.textContent = text;
+      return node;
+    };
+
+    const header = mk("div", { textAlign: "center", marginBottom: "24px" });
+    const h3 = mk("h3", { margin: "0 0 4px", fontSize: "28px", fontWeight: "900", color: "#2563eb" }, "MirtiloTrack");
+    const p1 = mk("p", { margin: "0", fontSize: "14px", color: "#6b7280" }, "Ranking de Produtividade");
+    const p2 = mk("p", { margin: "4px 0 0", fontSize: "12px", color: "#6b7280" }, dateLabel);
+    header.appendChild(h3);
+    header.appendChild(p1);
+    header.appendChild(p2);
+    if (periodLabel) {
+      const p3 = mk("p", { margin: "4px 0 0", fontSize: "12px", fontWeight: "700", color: "#2563eb" }, periodLabel);
+      header.appendChild(p3);
+    }
+    el.appendChild(header);
+
+    const stats = mk("div", { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "12px", marginBottom: "24px" });
+    const mkStat = (label: string, value: string) => {
+      const box = mk("div", { textAlign: "center", padding: "12px", background: "#eff6ff", borderRadius: "8px" });
+      const lbl = mk("p", { margin: "0 0 4px", fontSize: "11px", fontWeight: "700", color: "#6b7280", textTransform: "uppercase" }, label);
+      const val = mk("p", { margin: "0", fontSize: "20px", fontWeight: "900", color: "#2563eb" }, value);
+      box.appendChild(lbl);
+      box.appendChild(val);
+      return box;
+    };
+    stats.appendChild(mkStat("Total", `${(report?.totalKg ?? 0).toFixed(1)} kg`));
+    stats.appendChild(mkStat("Caixas", String(report?.totalRecords ?? 0)));
+    stats.appendChild(mkStat("Equipa", String(report?.workers?.length ?? 0)));
+    el.appendChild(stats);
+
+    const rows = mk("div");
+    sortedWorkers.forEach((w: any, i: number) => {
+      const bg = i === 0 ? "#fefce8" : i === 1 ? "#f8fafc" : i === 2 ? "#fffbeb" : "#f9fafb";
+      const border = i === 0 ? "#fde047" : i === 1 ? "#cbd5e1" : i === 2 ? "#fcd34d" : "#f3f4f6";
+      const rankColor = i === 0 ? "#eab308" : i === 1 ? "#94a3b8" : i === 2 ? "#b45309" : "#6b7280";
+      const rankSize = i < 3 ? "24px" : "16px";
+
+      const row = mk("div", { display: "flex", alignItems: "center", gap: "12px", padding: "12px", borderRadius: "8px", background: bg, border: `1px solid ${border}`, marginBottom: "8px" });
+
+      const rank = mk("div", { width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "900", fontSize: rankSize, color: rankColor, flexShrink: "0" }, String(i + 1));
+      row.appendChild(rank);
+
+      const info = mk("div", { flex: "1", minWidth: "0" });
+      if (showNames) {
+        const nameP = mk("p", { margin: "0", fontWeight: "700", fontSize: "14px", color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, w.workerName);
+        const idP = mk("p", { margin: "2px 0 0", fontSize: "11px", color: "#6b7280", fontFamily: "monospace" }, w.workerId);
+        info.appendChild(nameP);
+        info.appendChild(idP);
+      } else {
+        const anonP = mk("p", { margin: "0", fontWeight: "700", fontSize: "14px", color: "#111827" }, `Trabalhador ${i + 1}`);
+        info.appendChild(anonP);
+      }
+      if (w.totalIssues > 0) {
+        const badge = mk("span", { display: "inline-block", marginTop: "4px", fontSize: "10px", fontWeight: "700", padding: "2px 8px", borderRadius: "999px", background: "#fef3c7", color: "#92400e" }, `${w.totalIssues} ocor.`);
+        info.appendChild(badge);
+      }
+      row.appendChild(info);
+
+      const right = mk("div", { textAlign: "right", flexShrink: "0" });
+      const kgP = mk("p", { margin: "0", fontWeight: "900", fontSize: "20px", color: "#2563eb" });
+      kgP.textContent = `${(w.totalKg ?? 0).toFixed(2)} `;
+      const kgSpan = mk("span", { fontSize: "12px", fontWeight: "500", color: "#6b7280" }, "kg");
+      kgP.appendChild(kgSpan);
+      right.appendChild(kgP);
+      const meta = mk("p", { margin: "4px 0 0", fontSize: "11px", color: "#6b7280" }, `${w.totalCaixas} cx \u00b7 ${fmtHours(w.hoursWorked)} \u00b7 ${(w.kgPorHora ?? 0).toFixed(2)} kg/h`);
+      right.appendChild(meta);
+      row.appendChild(right);
+
+      rows.appendChild(row);
+    });
+    el.appendChild(rows);
+
+    const footer = mk("div", { marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #e5e7eb", textAlign: "center" });
+    footer.appendChild(mk("p", { margin: "0", fontSize: "11px", color: "#6b7280" }, "MirtiloTrack \u2014 Sistema de Gest\u00e3o de Colheita"));
+    el.appendChild(footer);
+
+    return el;
+  };
 
   const handleExportImage = async () => {
-    if (!exportRef.current) return;
-    let tmpContainer: HTMLDivElement | null = null;
-
+    let container: HTMLDivElement | null = null;
     try {
-      // Clona o elemento para um container temporario fora do viewport.
-      // Isso evita problemas com scroll/overflow do modal e nao interfere
-      // no DOM gerido pelo React.
-      const clone = exportRef.current.cloneNode(true) as HTMLDivElement;
-      clone.style.width = "800px";
-      clone.style.maxWidth = "800px";
-      clone.style.margin = "0";
+      container = document.createElement("div");
+      container.style.position = "fixed";
+      container.style.top = "0";
+      container.style.left = "0";
+      container.style.zIndex = "-9999";
+      container.style.pointerEvents = "none";
+      container.style.opacity = "0";
+      document.body.appendChild(container);
 
-      tmpContainer = document.createElement("div");
-      tmpContainer.style.position = "fixed";
-      tmpContainer.style.top = "-9999px";
-      tmpContainer.style.left = "-9999px";
-      tmpContainer.style.width = "800px";
-      tmpContainer.style.zIndex = "-1";
-      document.body.appendChild(tmpContainer);
-      tmpContainer.appendChild(clone);
+      const content = buildCaptureElement();
+      container.appendChild(content);
 
-      const canvas = await html2canvas(clone, {
-        scale: 2,
+      // Aguarda renderização
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      console.log("[Export] Elemento pronto, capturando...", content.offsetWidth, content.offsetHeight);
+      const dataUrl = await toPng(content, {
+        pixelRatio: 2,
         backgroundColor: "#ffffff",
-        useCORS: true,
-        logging: false,
       });
-
+      console.log("[Export] toPng OK, dataUrl length:", dataUrl.length);
       const link = document.createElement("a");
       link.download = `ranking-${dateFrom}${dateFrom !== dateTo ? `-${dateTo}` : ""}.png`;
-      link.href = canvas.toDataURL("image/png");
+      link.href = dataUrl;
       link.click();
       toast({ title: "Imagem exportada!" });
     } catch (err) {
-      console.error("Erro ao exportar imagem:", err);
+      console.error("[Export] Erro ao exportar imagem:", err);
       toast({ title: "Erro ao exportar imagem", variant: "destructive" });
     } finally {
-      if (tmpContainer && tmpContainer.parentNode) {
-        document.body.removeChild(tmpContainer);
+      if (container && container.parentNode) {
+        document.body.removeChild(container);
       }
     }
   };
 
   const handleExportPDF = async () => {
-    if (!exportRef.current) return;
-    let tmpContainer: HTMLDivElement | null = null;
-
+    let container: HTMLDivElement | null = null;
     try {
-      const clone = exportRef.current.cloneNode(true) as HTMLDivElement;
-      clone.style.width = "800px";
-      clone.style.maxWidth = "800px";
-      clone.style.margin = "0";
+      container = document.createElement("div");
+      container.style.position = "fixed";
+      container.style.top = "0";
+      container.style.left = "0";
+      container.style.zIndex = "-9999";
+      container.style.pointerEvents = "none";
+      container.style.opacity = "0";
+      document.body.appendChild(container);
 
-      tmpContainer = document.createElement("div");
-      tmpContainer.style.position = "fixed";
-      tmpContainer.style.top = "-9999px";
-      tmpContainer.style.left = "-9999px";
-      tmpContainer.style.width = "800px";
-      tmpContainer.style.zIndex = "-1";
-      document.body.appendChild(tmpContainer);
-      tmpContainer.appendChild(clone);
+      const content = buildCaptureElement();
+      container.appendChild(content);
 
-      const canvas = await html2canvas(clone, {
-        scale: 2,
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const dataUrl = await toPng(content, {
+        pixelRatio: 2,
         backgroundColor: "#ffffff",
-        useCORS: true,
-        logging: false,
       });
-      const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      const ratio = Math.min(pageWidth / imgWidth, pageHeight / imgHeight) * 0.95;
-      const finalWidth = imgWidth * ratio;
-      const finalHeight = imgHeight * ratio;
-      const x = (pageWidth - finalWidth) / 2;
-      const y = (pageHeight - finalHeight) / 2;
-      pdf.addImage(imgData, "PNG", x, y, finalWidth, finalHeight);
-      pdf.save(`ranking-${dateFrom}${dateFrom !== dateTo ? `-${dateTo}` : ""}.pdf`);
-      toast({ title: "PDF exportado!" });
+      const img = new Image();
+      img.onload = () => {
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const imgWidth = img.width;
+        const imgHeight = img.height;
+        const ratio = Math.min(pageWidth / imgWidth, pageHeight / imgHeight) * 0.95;
+        const finalWidth = imgWidth * ratio;
+        const finalHeight = imgHeight * ratio;
+        const x = (pageWidth - finalWidth) / 2;
+        const y = (pageHeight - finalHeight) / 2;
+        pdf.addImage(dataUrl, "PNG", x, y, finalWidth, finalHeight);
+        pdf.save(`ranking-${dateFrom}${dateFrom !== dateTo ? `-${dateTo}` : ""}.pdf`);
+        toast({ title: "PDF exportado!" });
+      };
+      img.onerror = () => {
+        toast({ title: "Erro ao gerar PDF", variant: "destructive" });
+      };
+      img.src = dataUrl;
     } catch (err) {
       console.error("Erro ao exportar PDF:", err);
       toast({ title: "Erro ao exportar PDF", variant: "destructive" });
     } finally {
-      if (tmpContainer && tmpContainer.parentNode) {
-        document.body.removeChild(tmpContainer);
+      if (container && container.parentNode) {
+        document.body.removeChild(container);
       }
     }
   };
@@ -475,7 +566,7 @@ export default function RankingPage() {
 
             {/* Preview */}
             <div className="flex-1 overflow-auto p-4 bg-muted/30">
-              <div ref={exportRef} className="bg-white rounded-xl p-6 shadow-sm">
+              <div className="bg-white rounded-xl p-6 shadow-sm">
                 {/* Header do preview */}
                 <div className="text-center mb-6">
                   <h3 className="text-2xl font-black text-primary mb-1">MirtiloTrack</h3>
