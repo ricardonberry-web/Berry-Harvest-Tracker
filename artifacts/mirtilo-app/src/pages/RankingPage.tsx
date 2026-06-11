@@ -146,8 +146,8 @@ export default function RankingPage() {
     const grid = mk("div", { display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: "14px" });
     sortedWorkers.forEach((w: any, i: number) => {
       const isMedal = i < 3;
-      const bg = i === 0 ? "#fefce8" : i === 1 ? "#f8fafc" : i === 2 ? "#fffbeb" : "#f9fafb";
-      const border = i === 0 ? "#fde047" : i === 1 ? "#cbd5e1" : i === 2 ? "#fcd34d" : "#f3f4f6";
+      const bg = "#ffffff";
+      const border = "#e5e7eb";
       const rankColor = i === 0 ? "#eab308" : i === 1 ? "#94a3b8" : i === 2 ? "#b45309" : "#6b7280";
       const medalEmoji = i === 0 ? "\uD83E\uDD47" : i === 1 ? "\uD83E\uDD48" : i === 2 ? "\uD83E\uDD49" : "";
 
@@ -603,7 +603,7 @@ export default function RankingPage() {
                 {/* Ranking list — 2 columns to match export */}
                 <div className="grid grid-cols-2 gap-3">
                   {sortedWorkers.map((w, i) => (
-                    <div key={w.workerId} className={`flex items-center gap-3 p-3 rounded-xl ${i === 0 ? 'bg-yellow-50 border-2 border-yellow-300' : i === 1 ? 'bg-slate-50 border-2 border-slate-300' : i === 2 ? 'bg-amber-50 border-2 border-amber-300' : 'bg-gray-50 border border-gray-200'}`}>
+                    <div key={w.workerId} className="flex items-center gap-3 p-3 rounded-xl bg-white border-2 border-gray-200">
                       <div className="w-10 h-10 flex items-center justify-center shrink-0">
                         {i === 0 ? (
                           <div className="w-10 h-10 rounded-full bg-yellow-500 flex items-center justify-center text-white text-xl">
