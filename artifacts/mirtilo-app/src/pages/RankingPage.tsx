@@ -104,7 +104,7 @@ export default function RankingPage() {
     const periodLabel = period === "morning" ? "Manh\u00e3 (00-13h)" : period === "afternoon" ? "Tarde (14-23h)" : "";
 
     const el = document.createElement("div");
-    el.style.width = "800px";
+    el.style.width = "960px";
     el.style.padding = "24px";
     el.style.background = "#ffffff";
     el.style.fontFamily = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
@@ -143,47 +143,51 @@ export default function RankingPage() {
     stats.appendChild(mkStat("Equipa", String(report?.workers?.length ?? 0)));
     el.appendChild(stats);
 
-    const rows = mk("div");
+    const grid = mk("div", { display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: "12px" });
     sortedWorkers.forEach((w: any, i: number) => {
       const bg = i === 0 ? "#fefce8" : i === 1 ? "#f8fafc" : i === 2 ? "#fffbeb" : "#f9fafb";
       const border = i === 0 ? "#fde047" : i === 1 ? "#cbd5e1" : i === 2 ? "#fcd34d" : "#f3f4f6";
       const rankColor = i === 0 ? "#eab308" : i === 1 ? "#94a3b8" : i === 2 ? "#b45309" : "#6b7280";
-      const rankSize = i < 3 ? "24px" : "16px";
+      const rankSize = i < 3 ? "22px" : "14px";
 
-      const row = mk("div", { display: "flex", alignItems: "center", gap: "12px", padding: "12px", borderRadius: "8px", background: bg, border: `1px solid ${border}`, marginBottom: "8px" });
+      const card = mk("div", { display: "flex", alignItems: "center", gap: "10px", padding: "10px", borderRadius: "8px", background: bg, border: `1px solid ${border}` });
 
-      const rank = mk("div", { width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "900", fontSize: rankSize, color: rankColor, flexShrink: "0" }, String(i + 1));
-      row.appendChild(rank);
+      const rank = mk("div", { width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "900", fontSize: rankSize, color: rankColor, flexShrink: "0" }, String(i + 1));
+      card.appendChild(rank);
 
       const info = mk("div", { flex: "1", minWidth: "0" });
       if (showNames) {
-        const nameP = mk("p", { margin: "0", fontWeight: "700", fontSize: "14px", color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, w.workerName);
-        const idP = mk("p", { margin: "2px 0 0", fontSize: "11px", color: "#6b7280", fontFamily: "monospace" }, w.workerId);
+        const nameP = mk("p", { margin: "0", fontWeight: "700", fontSize: "13px", color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, w.workerName);
+        const idP = mk("p", { margin: "2px 0 0", fontSize: "10px", color: "#6b7280", fontFamily: "monospace" }, w.workerId);
         info.appendChild(nameP);
         info.appendChild(idP);
       } else {
-        const anonP = mk("p", { margin: "0", fontWeight: "700", fontSize: "14px", color: "#111827" }, `Trabalhador ${i + 1}`);
+        const anonP = mk("p", { margin: "0", fontWeight: "700", fontSize: "13px", color: "#111827" }, `Trabalhador ${i + 1}`);
         info.appendChild(anonP);
       }
       if (w.totalIssues > 0) {
-        const badge = mk("span", { display: "inline-block", marginTop: "4px", fontSize: "10px", fontWeight: "700", padding: "2px 8px", borderRadius: "999px", background: "#fef3c7", color: "#92400e" }, `${w.totalIssues} ocor.`);
+        const badge = mk("span", { display: "inline-block", marginTop: "3px", fontSize: "9px", fontWeight: "700", padding: "1px 6px", borderRadius: "999px", background: "#fef3c7", color: "#92400e" }, `${w.totalIssues} ocor.`);
         info.appendChild(badge);
       }
-      row.appendChild(info);
+      card.appendChild(info);
 
       const right = mk("div", { textAlign: "right", flexShrink: "0" });
-      const kgP = mk("p", { margin: "0", fontWeight: "900", fontSize: "20px", color: "#2563eb" });
+      const kgP = mk("p", { margin: "0", fontWeight: "900", fontSize: "18px", color: "#2563eb" });
       kgP.textContent = `${(w.totalKg ?? 0).toFixed(2)} `;
-      const kgSpan = mk("span", { fontSize: "12px", fontWeight: "500", color: "#6b7280" }, "kg");
+      const kgSpan = mk("span", { fontSize: "11px", fontWeight: "500", color: "#6b7280" }, "kg");
       kgP.appendChild(kgSpan);
       right.appendChild(kgP);
-      const meta = mk("p", { margin: "4px 0 0", fontSize: "11px", color: "#6b7280" }, `${w.totalCaixas} cx \u00b7 ${fmtHours(w.hoursWorked)} \u00b7 ${(w.kgPorHora ?? 0).toFixed(2)} kg/h`);
-      right.appendChild(meta);
-      row.appendChild(right);
+      const cxMeta = mk("p", { margin: "2px 0 0", fontSize: "10px", color: "#6b7280" }, `${w.totalCaixas} cx \u00b7 ${fmtHours(w.hoursWorked)}`);
+      right.appendChild(cxMeta);
 
-      rows.appendChild(row);
+      const kgh = w.kgPorHora ?? 0;
+      const kghBadge = mk("span", { display: "inline-block", marginTop: "3px", fontSize: "11px", fontWeight: "900", padding: "2px 8px", borderRadius: "6px", background: "#1e3a8a", color: "#ffffff" }, `${kgh.toFixed(2)} kg/h`);
+      right.appendChild(kghBadge);
+      card.appendChild(right);
+
+      grid.appendChild(card);
     });
-    el.appendChild(rows);
+    el.appendChild(grid);
 
     const footer = mk("div", { marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #e5e7eb", textAlign: "center" });
     footer.appendChild(mk("p", { margin: "0", fontSize: "11px", color: "#6b7280" }, "MirtiloTrack \u2014 Sistema de Gest\u00e3o de Colheita"));
@@ -593,33 +597,34 @@ export default function RankingPage() {
                   </div>
                 </div>
 
-                {/* Ranking list */}
-                <div className="space-y-2">
+                {/* Ranking list — 2 columns to match export */}
+                <div className="grid grid-cols-2 gap-2">
                   {sortedWorkers.map((w, i) => (
-                    <div key={w.workerId} className={`flex items-center gap-3 p-3 rounded-lg ${i === 0 ? 'bg-yellow-50 border border-yellow-200' : i === 1 ? 'bg-slate-50 border border-slate-200' : i === 2 ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50 border border-gray-100'}`}>
-                      <div className="w-8 h-8 flex items-center justify-center font-black text-sm shrink-0">
+                    <div key={w.workerId} className={`flex items-center gap-2 p-2 rounded-lg ${i === 0 ? 'bg-yellow-50 border border-yellow-200' : i === 1 ? 'bg-slate-50 border border-slate-200' : i === 2 ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50 border border-gray-100'}`}>
+                      <div className="w-7 h-7 flex items-center justify-center font-black text-sm shrink-0">
                         {i === 0 ? <span className="text-yellow-500 text-lg">1</span> : i === 1 ? <span className="text-slate-400 text-lg">2</span> : i === 2 ? <span className="text-amber-700 text-lg">3</span> : <span className="text-muted-foreground">{i + 1}</span>}
                       </div>
                       <div className="flex-1 min-w-0">
                         {showNames ? (
                           <>
-                            <p className="font-bold text-sm text-foreground truncate">{w.workerName}</p>
-                            <p className="text-xs text-muted-foreground font-mono">{w.workerId}</p>
+                            <p className="font-bold text-xs text-foreground truncate">{w.workerName}</p>
+                            <p className="text-[10px] text-muted-foreground font-mono">{w.workerId}</p>
                           </>
                         ) : (
-                          <p className="font-bold text-sm text-foreground">Trabalhador {i + 1}</p>
+                          <p className="font-bold text-xs text-foreground">Trabalhador {i + 1}</p>
                         )}
                         {w.totalIssues > 0 && (
-                          <div className="inline-flex items-center gap-1 mt-1">
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                              {w.totalIssues} ocor.
-                            </span>
-                          </div>
+                          <span className="inline-block text-[9px] font-bold px-1 py-0.5 rounded-full bg-amber-100 text-amber-800 mt-0.5">
+                            {w.totalIssues} ocor.
+                          </span>
                         )}
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="font-black text-primary text-lg">{(w.totalKg ?? 0).toFixed(2)} <span className="text-xs font-medium text-muted-foreground">kg</span></p>
-                        <p className="text-xs text-muted-foreground">{w.totalCaixas} cx · {fmtHours(w.hoursWorked)} · {(w.kgPorHora ?? 0).toFixed(2)} kg/h</p>
+                        <p className="font-black text-primary text-sm">{(w.totalKg ?? 0).toFixed(2)} <span className="text-[10px] font-medium text-muted-foreground">kg</span></p>
+                        <p className="text-[10px] text-muted-foreground">{w.totalCaixas} cx · {fmtHours(w.hoursWorked)}</p>
+                        <span className="inline-block text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-900 text-white mt-0.5">
+                          {(w.kgPorHora ?? 0).toFixed(2)} kg/h
+                        </span>
                       </div>
                     </div>
                   ))}
