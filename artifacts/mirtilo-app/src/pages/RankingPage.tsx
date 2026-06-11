@@ -143,45 +143,54 @@ export default function RankingPage() {
     stats.appendChild(mkStat("Equipa", String(report?.workers?.length ?? 0)));
     el.appendChild(stats);
 
-    const grid = mk("div", { display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: "12px" });
+    const grid = mk("div", { display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: "14px" });
     sortedWorkers.forEach((w: any, i: number) => {
+      const isMedal = i < 3;
       const bg = i === 0 ? "#fefce8" : i === 1 ? "#f8fafc" : i === 2 ? "#fffbeb" : "#f9fafb";
       const border = i === 0 ? "#fde047" : i === 1 ? "#cbd5e1" : i === 2 ? "#fcd34d" : "#f3f4f6";
       const rankColor = i === 0 ? "#eab308" : i === 1 ? "#94a3b8" : i === 2 ? "#b45309" : "#6b7280";
-      const rankSize = i < 3 ? "22px" : "14px";
+      const medalEmoji = i === 0 ? "\uD83E\uDD47" : i === 1 ? "\uD83E\uDD48" : i === 2 ? "\uD83E\uDD49" : "";
 
-      const card = mk("div", { display: "flex", alignItems: "center", gap: "10px", padding: "10px", borderRadius: "8px", background: bg, border: `1px solid ${border}` });
+      const card = mk("div", { display: "flex", alignItems: "center", gap: "12px", padding: "14px", borderRadius: "10px", background: bg, border: `2px solid ${border}` });
 
-      const rank = mk("div", { width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "900", fontSize: rankSize, color: rankColor, flexShrink: "0" }, String(i + 1));
-      card.appendChild(rank);
+      // Rank badge — medal for top 3, circle for others
+      const rankWrapper = mk("div", { width: "44px", height: "44px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: "0" });
+      if (isMedal) {
+        const medalCircle = mk("div", { width: "44px", height: "44px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: rankColor, fontSize: "24px", lineHeight: "1" }, medalEmoji);
+        rankWrapper.appendChild(medalCircle);
+      } else {
+        const numCircle = mk("div", { width: "36px", height: "36px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: "#f3f4f6", border: "2px solid #e5e7eb", fontWeight: "900", fontSize: "16px", color: "#6b7280" }, String(i + 1));
+        rankWrapper.appendChild(numCircle);
+      }
+      card.appendChild(rankWrapper);
 
       const info = mk("div", { flex: "1", minWidth: "0" });
       if (showNames) {
-        const nameP = mk("p", { margin: "0", fontWeight: "700", fontSize: "13px", color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, w.workerName);
-        const idP = mk("p", { margin: "2px 0 0", fontSize: "10px", color: "#6b7280", fontFamily: "monospace" }, w.workerId);
+        const nameP = mk("p", { margin: "0", fontWeight: "800", fontSize: "15px", color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, w.workerName);
+        const idP = mk("p", { margin: "3px 0 0", fontSize: "12px", color: "#6b7280", fontFamily: "monospace", fontWeight: "600" }, w.workerId);
         info.appendChild(nameP);
         info.appendChild(idP);
       } else {
-        const anonP = mk("p", { margin: "0", fontWeight: "700", fontSize: "13px", color: "#111827" }, w.workerId);
+        const anonP = mk("p", { margin: "0", fontWeight: "800", fontSize: "15px", color: "#111827" }, w.workerId);
         info.appendChild(anonP);
       }
       if (w.totalIssues > 0) {
-        const badge = mk("span", { display: "inline-block", marginTop: "3px", fontSize: "9px", fontWeight: "700", padding: "1px 6px", borderRadius: "999px", background: "#fef3c7", color: "#92400e" }, `${w.totalIssues} ocor.`);
+        const badge = mk("span", { display: "inline-block", marginTop: "4px", fontSize: "10px", fontWeight: "800", padding: "2px 8px", borderRadius: "999px", background: "#fef3c7", color: "#92400e" }, `${w.totalIssues} ocor.`);
         info.appendChild(badge);
       }
       card.appendChild(info);
 
       const right = mk("div", { textAlign: "right", flexShrink: "0" });
-      const kgP = mk("p", { margin: "0", fontWeight: "900", fontSize: "18px", color: "#2563eb" });
+      const kgP = mk("p", { margin: "0", fontWeight: "900", fontSize: "22px", color: "#2563eb" });
       kgP.textContent = `${(w.totalKg ?? 0).toFixed(2)} `;
-      const kgSpan = mk("span", { fontSize: "11px", fontWeight: "500", color: "#6b7280" }, "kg");
+      const kgSpan = mk("span", { fontSize: "13px", fontWeight: "600", color: "#6b7280" }, "kg");
       kgP.appendChild(kgSpan);
       right.appendChild(kgP);
-      const cxMeta = mk("p", { margin: "2px 0 0", fontSize: "10px", color: "#6b7280" }, `${w.totalCaixas} cx \u00b7 ${fmtHours(w.hoursWorked)}`);
+      const cxMeta = mk("p", { margin: "3px 0 0", fontSize: "12px", color: "#6b7280", fontWeight: "600" }, `${w.totalCaixas} cx \u00b7 ${fmtHours(w.hoursWorked)}`);
       right.appendChild(cxMeta);
 
       const kgh = w.kgPorHora ?? 0;
-      const kghBadge = mk("span", { display: "inline-block", marginTop: "3px", fontSize: "11px", fontWeight: "900", padding: "2px 8px", borderRadius: "6px", background: "#1e3a8a", color: "#ffffff" }, `${kgh.toFixed(2)} kg/h`);
+      const kghBadge = mk("span", { display: "inline-block", marginTop: "4px", fontSize: "12px", fontWeight: "900", padding: "3px 10px", borderRadius: "6px", background: "#1e3a8a", color: "#ffffff" }, `${kgh.toFixed(2)} kg/h`);
       right.appendChild(kghBadge);
       card.appendChild(right);
 
@@ -598,31 +607,47 @@ export default function RankingPage() {
                 </div>
 
                 {/* Ranking list — 2 columns to match export */}
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   {sortedWorkers.map((w, i) => (
-                    <div key={w.workerId} className={`flex items-center gap-2 p-2 rounded-lg ${i === 0 ? 'bg-yellow-50 border border-yellow-200' : i === 1 ? 'bg-slate-50 border border-slate-200' : i === 2 ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50 border border-gray-100'}`}>
-                      <div className="w-7 h-7 flex items-center justify-center font-black text-sm shrink-0">
-                        {i === 0 ? <span className="text-yellow-500 text-lg">1</span> : i === 1 ? <span className="text-slate-400 text-lg">2</span> : i === 2 ? <span className="text-amber-700 text-lg">3</span> : <span className="text-muted-foreground">{i + 1}</span>}
+                    <div key={w.workerId} className={`flex items-center gap-3 p-3 rounded-xl ${i === 0 ? 'bg-yellow-50 border-2 border-yellow-300' : i === 1 ? 'bg-slate-50 border-2 border-slate-300' : i === 2 ? 'bg-amber-50 border-2 border-amber-300' : 'bg-gray-50 border border-gray-200'}`}>
+                      <div className="w-10 h-10 flex items-center justify-center shrink-0">
+                        {i === 0 ? (
+                          <div className="w-10 h-10 rounded-full bg-yellow-500 flex items-center justify-center text-white text-xl">
+                            <Medal className="w-5 h-5" />
+                          </div>
+                        ) : i === 1 ? (
+                          <div className="w-10 h-10 rounded-full bg-slate-400 flex items-center justify-center text-white text-xl">
+                            <Medal className="w-5 h-5" />
+                          </div>
+                        ) : i === 2 ? (
+                          <div className="w-10 h-10 rounded-full bg-amber-600 flex items-center justify-center text-white text-xl">
+                            <Medal className="w-5 h-5" />
+                          </div>
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center text-gray-500 font-black text-sm">
+                            {i + 1}
+                          </div>
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         {showNames ? (
                           <>
-                            <p className="font-bold text-xs text-foreground truncate">{w.workerName}</p>
-                            <p className="text-[10px] text-muted-foreground font-mono">{w.workerId}</p>
+                            <p className="font-bold text-sm text-foreground truncate">{w.workerName}</p>
+                            <p className="text-xs text-muted-foreground font-mono font-semibold">{w.workerId}</p>
                           </>
                         ) : (
-                          <p className="font-bold text-xs text-foreground">{w.workerId}</p>
+                          <p className="font-bold text-sm text-foreground">{w.workerId}</p>
                         )}
                         {w.totalIssues > 0 && (
-                          <span className="inline-block text-[9px] font-bold px-1 py-0.5 rounded-full bg-amber-100 text-amber-800 mt-0.5">
+                          <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 mt-1">
                             {w.totalIssues} ocor.
                           </span>
                         )}
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="font-black text-primary text-sm">{(w.totalKg ?? 0).toFixed(2)} <span className="text-[10px] font-medium text-muted-foreground">kg</span></p>
-                        <p className="text-[10px] text-muted-foreground">{w.totalCaixas} cx · {fmtHours(w.hoursWorked)}</p>
-                        <span className="inline-block text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-900 text-white mt-0.5">
+                        <p className="font-black text-primary text-lg">{(w.totalKg ?? 0).toFixed(2)} <span className="text-xs font-medium text-muted-foreground">kg</span></p>
+                        <p className="text-xs text-muted-foreground font-medium">{w.totalCaixas} cx · {fmtHours(w.hoursWorked)}</p>
+                        <span className="inline-block text-xs font-bold px-2 py-1 rounded-md bg-blue-900 text-white mt-1">
                           {(w.kgPorHora ?? 0).toFixed(2)} kg/h
                         </span>
                       </div>
