@@ -19,7 +19,7 @@ run = "pnpm --filter @workspace/mirtilo-app run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/mirtilo-app", "run", "build" ]
-publicDir = "artifacts/mirtilo-app/dist/public"
+publicDir = "artifacts/mirtilo-app/dist"
 serve = "static"
 
 [[services.production.rewrites]]
