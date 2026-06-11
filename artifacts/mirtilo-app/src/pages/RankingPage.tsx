@@ -162,7 +162,7 @@ export default function RankingPage() {
         info.appendChild(nameP);
         info.appendChild(idP);
       } else {
-        const anonP = mk("p", { margin: "0", fontWeight: "700", fontSize: "13px", color: "#111827" }, `Trabalhador ${i + 1}`);
+        const anonP = mk("p", { margin: "0", fontWeight: "700", fontSize: "13px", color: "#111827" }, w.workerId);
         info.appendChild(anonP);
       }
       if (w.totalIssues > 0) {
@@ -611,7 +611,7 @@ export default function RankingPage() {
                             <p className="text-[10px] text-muted-foreground font-mono">{w.workerId}</p>
                           </>
                         ) : (
-                          <p className="font-bold text-xs text-foreground">Trabalhador {i + 1}</p>
+                          <p className="font-bold text-xs text-foreground">{w.workerId}</p>
                         )}
                         {w.totalIssues > 0 && (
                           <span className="inline-block text-[9px] font-bold px-1 py-0.5 rounded-full bg-amber-100 text-amber-800 mt-0.5">
