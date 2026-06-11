@@ -186,7 +186,7 @@ export default function RankingPage() {
       const kgSpan = mk("span", { fontSize: "13px", fontWeight: "600", color: "#6b7280" }, "kg");
       kgP.appendChild(kgSpan);
       right.appendChild(kgP);
-      const cxMeta = mk("p", { margin: "3px 0 0", fontSize: "12px", color: "#6b7280", fontWeight: "600" }, `${w.totalCaixas} cx \u00b7 ${fmtHours(w.hoursWorked)}`);
+      const cxMeta = mk("p", { margin: "3px 0 0", fontSize: "12px", color: "#6b7280", fontWeight: "600" }, `${w.totalCaixas} cx`);
       right.appendChild(cxMeta);
 
       const kgh = w.kgPorHora ?? 0;
@@ -389,7 +389,6 @@ export default function RankingPage() {
           <StatCard label="Total Colhido" value={`${(report?.totalKg ?? 0).toFixed(1) || 0} kg`} />
           <StatCard label="Total Caixas" value={report?.totalRecords.toString() || "0"} />
           <StatCard label="Trabalhadores" value={report?.workers.length.toString() || "0"} />
-          <StatCard label="Horas equipa" value={`${(teamHours ?? 0).toFixed(1)} h`} />
           <StatCard label="Custo equipa" value={`${(teamHours * 7.5).toFixed(2)} €`} />
           <StatCard label="Kg / hora (equipa)" value={teamKgPorHora !== null ? `${(teamKgPorHora ?? 0).toFixed(2)} kg/h` : "—"} highlight />
         </div>
@@ -409,13 +408,10 @@ export default function RankingPage() {
             <div className="bg-card border border-border rounded-2xl p-4 flex flex-col md:flex-row md:items-center gap-3">
               <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground uppercase tracking-wider"><Filter className="w-4 h-4" /> Ordenar por</div>
               <div className="flex flex-wrap gap-2">
-                {([{ k: "kg" as SortKey, label: "Total kg" }, { k: "kgPorHora" as SortKey, label: "Kg / hora" }, { k: "caixas" as SortKey, label: "Caixas" }, { k: "horas" as SortKey, label: "Horas" }]).map(({ k, label }) => (
+                {([{ k: "kg" as SortKey, label: "Total kg" }, { k: "kgPorHora" as SortKey, label: "Kg / hora" }, { k: "caixas" as SortKey, label: "Caixas" }]).map(({ k, label }) => (
                   <button key={k} onClick={() => setSortKey(k)} className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-colors ${sortKey === k ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}>{label}</button>
                 ))}
               </div>
-              <label className="md:ml-auto inline-flex items-center gap-2 text-sm font-medium cursor-pointer select-none">
-                <input type="checkbox" checked={onlyWithHours} onChange={(e) => setOnlyWithHours(e.target.checked)} className="w-4 h-4 accent-primary" /> Só com horas registadas
-              </label>
             </div>
             <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
               {isLoading ? <div className="p-12 flex justify-center"><div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div></div>
@@ -429,7 +425,6 @@ export default function RankingPage() {
                         <th className="p-4 font-bold text-xs uppercase tracking-wider text-muted-foreground">Trabalhador</th>
                         <th className="p-4 font-bold text-xs uppercase tracking-wider text-muted-foreground text-right">Caixas</th>
                         <th className="p-4 font-bold text-xs uppercase tracking-wider text-muted-foreground text-right">Total (kg)</th>
-                        <th className="p-4 font-bold text-xs uppercase tracking-wider text-muted-foreground text-right">Horas</th>
                         <th className="p-4 font-bold text-xs uppercase tracking-wider text-primary text-right">Kg / h</th>
                         <th className="p-4 font-bold text-xs uppercase tracking-wider text-muted-foreground text-right hidden sm:table-cell">Méd/Cx</th>
                         <th className="p-4 font-bold text-xs uppercase tracking-wider text-muted-foreground text-right hidden md:table-cell">Cx/h</th>
@@ -445,7 +440,6 @@ export default function RankingPage() {
                           <td className="p-4"><p className="font-bold">{w.workerName}</p><p className="text-xs text-muted-foreground font-mono">{w.workerId}</p></td>
                           <td className="p-4 text-right font-medium">{w.totalCaixas}</td>
                           <td className="p-4 text-right"><span className="bg-primary/10 text-primary px-3 py-1 rounded-lg font-bold text-lg">{(w.totalKg ?? 0).toFixed(2)}</span></td>
-                          <td className="p-4 text-right font-medium">{fmtHours(w.hoursWorked)}</td>
                           <td className="p-4 text-right">{w.kgPorHora !== null ? <span className="bg-success/10 text-success px-2.5 py-1 rounded-lg font-bold">{(w.kgPorHora ?? 0).toFixed(2)}</span> : <span className="text-muted-foreground">—</span>}</td>
                           <td className="p-4 text-right text-muted-foreground hidden sm:table-cell">{(w.mediaGrPorCaixa ?? 0).toFixed(0)}g</td>
                           <td className="p-4 text-right text-muted-foreground hidden md:table-cell">{(w.caixasPorHora ?? 0).toFixed(1)}</td>
@@ -646,7 +640,7 @@ export default function RankingPage() {
                       </div>
                       <div className="text-right shrink-0">
                         <p className="font-black text-primary text-lg">{(w.totalKg ?? 0).toFixed(2)} <span className="text-xs font-medium text-muted-foreground">kg</span></p>
-                        <p className="text-xs text-muted-foreground font-medium">{w.totalCaixas} cx · {fmtHours(w.hoursWorked)}</p>
+                        <p className="text-xs text-muted-foreground font-medium">{w.totalCaixas} cx</p>
                         <span className="inline-block text-xs font-bold px-2 py-1 rounded-md bg-blue-900 text-white mt-1">
                           {(w.kgPorHora ?? 0).toFixed(2)} kg/h
                         </span>
