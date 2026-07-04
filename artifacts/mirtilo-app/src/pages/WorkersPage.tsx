@@ -7,7 +7,9 @@ import {
   useDeleteWorker,
   useGetWorkerTimesheet,
 } from "@workspace/api-client-react";
-import { Users, Plus, QrCode, Barcode, Search, UserCheck, Clock, Download, X, Calendar as CalendarIcon, Euro, Pencil, Trash2, AlertTriangle, Power, PowerOff } from "lucide-react";
+import { Users, Plus, QrCode, Barcode, Search, UserCheck, Clock, Download, X, Calendar as CalendarIcon, Euro, Pencil, Trash2, AlertTriangle, Power, PowerOff, FileText } from "lucide-react";
+import { toPng } from "html-to-image";
+import { jsPDF } from "jspdf";
 import { useQueryClient } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import JsBarcode from "jsbarcode";
@@ -649,6 +651,260 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
     window.location.href = `/api/workers/${encodeURIComponent(worker.id)}/timesheet/export?${params.toString()}`;
   };
 
+  const buildTimesheetCaptureElement = (): HTMLDivElement => {
+    const dateLabel = from === to
+      ? format(new Date(from), "dd/MM/yyyy")
+      : `${format(new Date(from), "dd/MM/yyyy")} \u2014 ${format(new Date(to), "dd/MM/yyyy")}`;
+
+    const el = document.createElement("div");
+    el.style.width = "800px";
+    el.style.padding = "32px";
+    el.style.background = "#ffffff";
+    el.style.fontFamily = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+
+    const mk = (tag: string, styles: Partial<CSSStyleDeclaration> = {}, text?: string): HTMLElement => {
+      const node = document.createElement(tag);
+      Object.assign(node.style, styles);
+      if (text !== undefined) node.textContent = text;
+      return node;
+    };
+
+    // Header
+    const header = mk("div", { textAlign: "center", marginBottom: "24px" });
+    header.appendChild(mk("h2", { margin: "0 0 4px", fontSize: "24px", fontWeight: "900", color: "#2563eb" }, "MirtiloTrack"));
+    header.appendChild(mk("p", { margin: "0", fontSize: "14px", color: "#6b7280" }, "Folha de Horas"));
+    header.appendChild(mk("p", { margin: "4px 0 0", fontSize: "16px", fontWeight: "700", color: "#111827" }, worker.name));
+    header.appendChild(mk("p", { margin: "2px 0 0", fontSize: "12px", color: "#6b7280", fontFamily: "monospace" }, worker.id));
+    header.appendChild(mk("p", { margin: "4px 0 0", fontSize: "12px", color: "#6b7280" }, dateLabel));
+    if (hourlyRate !== null) {
+      header.appendChild(mk("p", { margin: "4px 0 0", fontSize: "12px", fontWeight: "700", color: "#2563eb" }, `Valor/hora: ${hourlyRate.toFixed(2)} \u20AC`));
+    }
+    el.appendChild(header);
+
+    // Stats
+    if (ts && ts.days.length > 0) {
+      const stats = mk("div", { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "12px", marginBottom: "20px" });
+      const mkStat = (label: string, value: string) => {
+        const box = mk("div", { textAlign: "center", padding: "10px", background: "#eff6ff", borderRadius: "8px" });
+        box.appendChild(mk("p", { margin: "0 0 2px", fontSize: "10px", fontWeight: "700", color: "#6b7280", textTransform: "uppercase" }, label));
+        box.appendChild(mk("p", { margin: "0", fontSize: "16px", fontWeight: "900", color: "#2563eb" }, value));
+        return box;
+      };
+      stats.appendChild(mkStat("Dias", String(ts.totalDays ?? 0)));
+      stats.appendChild(mkStat("Horas", `${(ts.totalHours ?? 0).toFixed(2)} h`));
+      stats.appendChild(mkStat("Valor/h", hourlyRate !== null ? `${hourlyRate.toFixed(2)} \u20AC` : "\u2014"));
+      stats.appendChild(mkStat("Total", ts.totalPay !== null ? `${ts.totalPay.toFixed(2)} \u20AC` : "\u2014"));
+      el.appendChild(stats);
+    }
+
+    // Table
+    if (ts && ts.days.length > 0) {
+      const tableWrap = mk("div", { marginBottom: "16px" });
+      const tbl = document.createElement("table");
+      tbl.style.width = "100%";
+      tbl.style.borderCollapse = "collapse";
+      tbl.style.fontSize = "12px";
+
+      const thead = document.createElement("thead");
+      const thr = document.createElement("tr");
+      thr.style.background = "#f3f4f6";
+      const headers = ["Data", "Entrada", "Sa\u00edda", "Horas", "Ocor.", "Valor (\u20AC)"];
+      headers.forEach((h, idx) => {
+        const th = document.createElement("th");
+        th.textContent = h;
+        th.style.padding = "8px 10px";
+        th.style.fontWeight = "700";
+        th.style.fontSize = "10px";
+        th.style.textTransform = "uppercase";
+        th.style.color = "#6b7280";
+        th.style.borderBottom = "2px solid #e5e7eb";
+        th.style.textAlign = idx === 0 ? "left" : idx === 5 ? "right" : "center";
+        thr.appendChild(th);
+      });
+      thead.appendChild(thr);
+      tbl.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      ts.days.forEach((d: any) => {
+        const shifts = d.shifts ?? [];
+        const rows = Math.max(shifts.length, 1);
+        shifts.forEach((s: any, idx: number) => {
+          const tr = document.createElement("tr");
+          tr.style.borderBottom = "1px solid #f3f4f6";
+
+          if (idx === 0) {
+            const tdDate = document.createElement("td");
+            tdDate.textContent = fmtDate(d.date);
+            tdDate.style.padding = "8px 10px";
+            tdDate.style.fontWeight = "600";
+            tdDate.style.color = "#111827";
+            tdDate.rowSpan = rows;
+            tdDate.style.verticalAlign = "top";
+            tdDate.style.borderRight = "1px solid #f3f4f6";
+            tr.appendChild(tdDate);
+          }
+
+          const tdIn = document.createElement("td");
+          tdIn.textContent = fmtTime(s.checkInAt);
+          tdIn.style.padding = "8px 10px";
+          tdIn.style.textAlign = "center";
+          tdIn.style.fontFamily = "monospace";
+          tdIn.style.color = "#374151";
+          tr.appendChild(tdIn);
+
+          const tdOut = document.createElement("td");
+          tdOut.textContent = fmtTime(s.checkOutAt);
+          tdOut.style.padding = "8px 10px";
+          tdOut.style.textAlign = "center";
+          tdOut.style.fontFamily = "monospace";
+          tdOut.style.color = "#374151";
+          tr.appendChild(tdOut);
+
+          const tdHours = document.createElement("td");
+          tdHours.textContent = fmtHours(s.hoursWorked);
+          tdHours.style.padding = "8px 10px";
+          tdHours.style.textAlign = "center";
+          tdHours.style.fontWeight = "700";
+          tdHours.style.color = "#111827";
+          tr.appendChild(tdHours);
+
+          if (idx === 0) {
+            const tdIssues = document.createElement("td");
+            if (d.totalIssues > 0) {
+              const badge = mk("span", { display: "inline-block", fontSize: "10px", fontWeight: "800", padding: "2px 8px", borderRadius: "999px", background: "#fef3c7", color: "#92400e" }, String(d.totalIssues));
+              tdIssues.appendChild(badge);
+            } else {
+              tdIssues.textContent = "\u2014";
+              tdIssues.style.color = "#9ca3af";
+            }
+            tdIssues.style.padding = "8px 10px";
+            tdIssues.style.textAlign = "center";
+            tdIssues.rowSpan = rows;
+            tdIssues.style.verticalAlign = "top";
+            tr.appendChild(tdIssues);
+          }
+
+          const tdPay = document.createElement("td");
+          tdPay.textContent = s.pay !== null && s.pay !== undefined ? `${s.pay.toFixed(2)}` : "\u2014";
+          tdPay.style.padding = "8px 10px";
+          tdPay.style.textAlign = "right";
+          tdPay.style.fontWeight = "700";
+          tdPay.style.color = s.pay !== null ? "#059669" : "#9ca3af";
+          tr.appendChild(tdPay);
+
+          tbody.appendChild(tr);
+        });
+      });
+
+      // Footer row
+      const tfr = document.createElement("tr");
+      tfr.style.background = "#f3f4f6";
+      tfr.style.borderTop = "2px solid #e5e7eb";
+      const tdTotalLabel = document.createElement("td");
+      tdTotalLabel.textContent = "Total";
+      tdTotalLabel.colSpan = 3;
+      tdTotalLabel.style.padding = "10px";
+      tdTotalLabel.style.fontWeight = "900";
+      tdTotalLabel.style.fontSize = "13px";
+      tdTotalLabel.style.color = "#111827";
+      tfr.appendChild(tdTotalLabel);
+
+      const tdTotalHours = document.createElement("td");
+      tdTotalHours.textContent = `${(ts.totalHours ?? 0).toFixed(2)} h`;
+      tdTotalHours.style.padding = "10px";
+      tdTotalHours.style.textAlign = "center";
+      tdTotalHours.style.fontWeight = "900";
+      tdTotalHours.style.fontSize = "13px";
+      tdTotalHours.style.color = "#111827";
+      tfr.appendChild(tdTotalHours);
+
+      const tdTotalIssues = document.createElement("td");
+      const totalIssues = ts.days.reduce((acc: number, d: any) => acc + (d.totalIssues ?? 0), 0);
+      tdTotalIssues.textContent = String(totalIssues);
+      tdTotalIssues.style.padding = "10px";
+      tdTotalIssues.style.textAlign = "center";
+      tdTotalIssues.style.fontWeight = "900";
+      tdTotalIssues.style.fontSize = "13px";
+      tdTotalIssues.style.color = totalIssues > 0 ? "#92400e" : "#9ca3af";
+      tfr.appendChild(tdTotalIssues);
+
+      const tdTotalPay = document.createElement("td");
+      tdTotalPay.textContent = ts.totalPay !== null ? `${ts.totalPay.toFixed(2)} \u20AC` : "\u2014";
+      tdTotalPay.style.padding = "10px";
+      tdTotalPay.style.textAlign = "right";
+      tdTotalPay.style.fontWeight = "900";
+      tdTotalPay.style.fontSize = "13px";
+      tdTotalPay.style.color = "#2563eb";
+      tfr.appendChild(tdTotalPay);
+
+      tbody.appendChild(tfr);
+      tbl.appendChild(tbody);
+      tableWrap.appendChild(tbl);
+      el.appendChild(tableWrap);
+    }
+
+    const footer = mk("div", { marginTop: "20px", paddingTop: "12px", borderTop: "1px solid #e5e7eb", textAlign: "center" });
+    footer.appendChild(mk("p", { margin: "0", fontSize: "10px", color: "#9ca3af" }, "MirtiloTrack \u2014 Sistema de Gest\u00e3o de Colheita"));
+    el.appendChild(footer);
+
+    return el;
+  };
+
+  const handleExportPDF = async () => {
+    let container: HTMLDivElement | null = null;
+    try {
+      container = document.createElement("div");
+      container.style.position = "fixed";
+      container.style.top = "0";
+      container.style.left = "0";
+      container.style.zIndex = "-9999";
+      container.style.pointerEvents = "none";
+      container.style.opacity = "0";
+      document.body.appendChild(container);
+
+      const content = buildTimesheetCaptureElement();
+      container.appendChild(content);
+
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const dataUrl = await toPng(content, {
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+      });
+
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const img = new Image();
+      img.onload = () => {
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 10;
+        const availableWidth = pageWidth - margin * 2;
+        const availableHeight = pageHeight - margin * 2;
+        const imgWidth = img.width;
+        const imgHeight = img.height;
+        const ratio = Math.min(availableWidth / imgWidth, availableHeight / imgHeight);
+        const finalWidth = imgWidth * ratio;
+        const finalHeight = imgHeight * ratio;
+        const x = margin + (availableWidth - finalWidth) / 2;
+        const y = margin;
+        pdf.addImage(dataUrl, "PNG", x, y, finalWidth, finalHeight);
+        pdf.save(`folha-horas-${worker.id}-${from}${from !== to ? `-${to}` : ""}.pdf`);
+        toast({ title: "PDF exportado!" });
+      };
+      img.onerror = () => {
+        toast({ title: "Erro ao gerar PDF", variant: "destructive" });
+      };
+      img.src = dataUrl;
+    } catch (err) {
+      console.error("Erro ao exportar PDF:", err);
+      toast({ title: "Erro ao exportar PDF", variant: "destructive" });
+    } finally {
+      if (container && container.parentNode) {
+        document.body.removeChild(container);
+      }
+    }
+  };
+
   const setQuickRange = (days: number) => {
     setFrom(format(subDays(new Date(), days), "yyyy-MM-dd"));
     setTo(format(new Date(), "yyyy-MM-dd"));
@@ -918,10 +1174,18 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
           <button
             onClick={handleExport}
             disabled={!ts || ts.days.length === 0}
-            className="flex-1 flex items-center justify-center gap-2 py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/25 hover:shadow-primary/40 disabled:opacity-50"
+            className="flex-1 flex items-center justify-center gap-2 py-3 bg-secondary text-secondary-foreground font-bold rounded-xl hover:bg-secondary/80 disabled:opacity-50"
           >
             <Download className="w-5 h-5" />
-            Exportar CSV
+            CSV
+          </button>
+          <button
+            onClick={handleExportPDF}
+            disabled={!ts || ts.days.length === 0}
+            className="flex-1 flex items-center justify-center gap-2 py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg shadow-primary/25 hover:shadow-primary/40 disabled:opacity-50"
+          >
+            <FileText className="w-5 h-5" />
+            PDF
           </button>
         </div>
       </div>
