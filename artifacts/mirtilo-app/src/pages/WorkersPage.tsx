@@ -659,7 +659,9 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
     const sorted = [...rankingReport.workers].sort((a: any, b: any) => (b.totalKg ?? 0) - (a.totalKg ?? 0));
     const idx = sorted.findIndex((w: any) => w.workerId === worker.id);
     if (idx === -1) return null;
-    return { position: idx + 1, total: sorted.length, totalKg: sorted[idx].totalKg ?? 0 };
+    const w = sorted[idx];
+    const kgPorHora = w.hoursWorked ? Math.round(((w.totalKg ?? 0) / w.hoursWorked) * 100) / 100 : null;
+    return { position: idx + 1, total: sorted.length, totalKg: w.totalKg ?? 0, kgPorHora };
   }, [rankingReport, worker.id]);
 
   const handleExport = () => {
@@ -708,6 +710,9 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
       const rankText = mk("div", { textAlign: "left" });
       rankText.appendChild(mk("p", { margin: "0", fontSize: "14px", fontWeight: "800", color: "#1e40af" }, `Posi\u00e7\u00e3o ${workerRank.position}\u00ba de ${workerRank.total} trabalhadores`));
       rankText.appendChild(mk("p", { margin: "2px 0 0", fontSize: "12px", fontWeight: "700", color: "#2563eb" }, `${workerRank.totalKg.toFixed(2)} kg total \u2014 Ranking por Total KG`));
+      if (workerRank.kgPorHora !== null) {
+        rankText.appendChild(mk("p", { margin: "2px 0 0", fontSize: "12px", fontWeight: "800", color: "#059669" }, `${workerRank.kgPorHora.toFixed(2)} kg/h \u2014 R\u00e1cio de produtividade`));
+      }
       rankWrapper.appendChild(circle);
       rankWrapper.appendChild(rankText);
       el.appendChild(rankWrapper);
@@ -1060,6 +1065,9 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
             <div>
               <p className="text-sm font-bold text-primary">Posição {workerRank.position}º de {workerRank.total} trabalhadores</p>
               <p className="text-xs text-muted-foreground font-medium">{workerRank.totalKg.toFixed(2)} kg total — Ranking por Total KG</p>
+              {workerRank.kgPorHora !== null && (
+                <p className="text-xs font-bold text-success mt-0.5">{workerRank.kgPorHora.toFixed(2)} kg/h — Rácio de produtividade</p>
+              )}
             </div>
           </div>
         )}
