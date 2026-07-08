@@ -645,6 +645,23 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
     { query: { keepPreviousData: true } as any },
   );
 
+  // Buscar ranking global para o mesmo período (para mostrar posição no PDF)
+  const [rankingReport, setRankingReport] = useState<any>(null);
+  useEffect(() => {
+    fetch(import.meta.env.VITE_API_URL + "/api/reports/range?from=" + from + "&to=" + to)
+      .then(r => r.json())
+      .then(data => setRankingReport(data))
+      .catch(() => setRankingReport(null));
+  }, [from, to]);
+
+  const workerRank = useMemo(() => {
+    if (!rankingReport?.workers) return null;
+    const sorted = [...rankingReport.workers].sort((a: any, b: any) => (b.totalKg ?? 0) - (a.totalKg ?? 0));
+    const idx = sorted.findIndex((w: any) => w.workerId === worker.id);
+    if (idx === -1) return null;
+    return { position: idx + 1, total: sorted.length, totalKg: sorted[idx].totalKg ?? 0 };
+  }, [rankingReport, worker.id]);
+
   const handleExport = () => {
     const params = new URLSearchParams({ from, to });
     if (hourlyRate !== null) params.set("hourlyRate", String(hourlyRate));
@@ -680,6 +697,21 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
       header.appendChild(mk("p", { margin: "4px 0 0", fontSize: "12px", fontWeight: "700", color: "#2563eb" }, `Valor/hora: ${hourlyRate.toFixed(2)} \u20AC`));
     }
     el.appendChild(header);
+
+    // Ranking position
+    if (workerRank) {
+      const rankWrapper = mk("div", { display: "flex", alignItems: "center", justifyContent: "center", gap: "12px", marginBottom: "20px", padding: "12px 20px", background: "#eff6ff", borderRadius: "10px", border: "2px solid #bfdbfe" });
+      const isTop3 = workerRank.position <= 3;
+      const medal = workerRank.position === 1 ? "\uD83E\uDD47" : workerRank.position === 2 ? "\uD83E\uDD48" : workerRank.position === 3 ? "\uD83E\uDD49" : "";
+      const circleBg = workerRank.position === 1 ? "#eab308" : workerRank.position === 2 ? "#94a3b8" : workerRank.position === 3 ? "#b45309" : "#2563eb";
+      const circle = mk("div", { width: "36px", height: "36px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: circleBg, color: "#ffffff", fontWeight: "900", fontSize: isTop3 ? "20px" : "14px", lineHeight: "1" }, isTop3 ? medal : String(workerRank.position));
+      const rankText = mk("div", { textAlign: "left" });
+      rankText.appendChild(mk("p", { margin: "0", fontSize: "14px", fontWeight: "800", color: "#1e40af" }, `Posi\u00e7\u00e3o ${workerRank.position}\u00ba de ${workerRank.total} trabalhadores`));
+      rankText.appendChild(mk("p", { margin: "2px 0 0", fontSize: "12px", fontWeight: "700", color: "#2563eb" }, `${workerRank.totalKg.toFixed(2)} kg total \u2014 Ranking por Total KG`));
+      rankWrapper.appendChild(circle);
+      rankWrapper.appendChild(rankText);
+      el.appendChild(rankWrapper);
+    }
 
     // Stats
     if (ts && ts.days.length > 0) {
