@@ -7,7 +7,7 @@ import {
   useDeleteWorker,
   useGetWorkerTimesheet,
 } from "@workspace/api-client-react";
-import { Users, Plus, QrCode, Barcode, Search, UserCheck, Clock, Download, X, Calendar as CalendarIcon, Euro, Pencil, Trash2, AlertTriangle, Power, PowerOff, FileText } from "lucide-react";
+import { Users, Plus, QrCode, Barcode, Search, UserCheck, Clock, Download, X, Calendar as CalendarIcon, Euro, Pencil, Trash2, AlertTriangle, Power, PowerOff, FileText, Medal } from "lucide-react";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 import { useQueryClient } from "@tanstack/react-query";
@@ -1050,6 +1050,19 @@ function TimesheetModal({ worker, onClose }: { worker: { id: string, name: strin
             }} className="px-3 py-1.5 text-xs font-bold bg-muted text-muted-foreground rounded-lg hover:bg-muted/70">Este mês</button>
           </div>
         </div>
+
+        {/* Ranking position */}
+        {workerRank && (
+          <div className="mx-5 mt-4 p-3 bg-primary/5 border border-primary/20 rounded-xl flex items-center justify-center gap-3">
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-black text-sm ${workerRank.position === 1 ? "bg-yellow-500" : workerRank.position === 2 ? "bg-slate-400" : workerRank.position === 3 ? "bg-amber-600" : "bg-primary"}`}>
+              {workerRank.position <= 3 ? <Medal className="w-5 h-5" /> : workerRank.position}
+            </div>
+            <div>
+              <p className="text-sm font-bold text-primary">Posição {workerRank.position}º de {workerRank.total} trabalhadores</p>
+              <p className="text-xs text-muted-foreground font-medium">{workerRank.totalKg.toFixed(2)} kg total — Ranking por Total KG</p>
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="p-5 grid grid-cols-2 sm:grid-cols-4 gap-3 border-b border-border bg-muted/20">
